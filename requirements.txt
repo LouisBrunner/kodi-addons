@@ -1,0 +1,4 @@
+Kodistubs==21.0.0
+beautifulsoup4==4.13.4
+requests==2.31.0
+ruff==0.11.9

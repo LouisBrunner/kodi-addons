@@ -1,0 +1,5 @@
+.DS_Store
+/repo/addons
+repo.zip
+__pycache__
+/settings.json

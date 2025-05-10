@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<addon
+  id="plugin.video.dropout"
+  name="Dropout.tv"
+  provider-name="LouisBrunner"
+  version="0.0.1"
+>
+	<requires>
+		<import addon="xbmc.python" version="3.0.1" />
+		<import addon="xbmc.addon" version="20.90.101" />
+		<import addon="script.module.beautifulsoup4" version="4.12.2" />
+		<import addon="script.module.requests" version="2.31.0" />
+		<import addon="inputstream.adaptive" version="21.5.13" />
+	</requires>
+	<extension point="xbmc.python.pluginsource" library="entry.py" provides="video">
+		<provides>video</provides>
+	</extension>
+	<extension point="xbmc.service" library="player.py">
+		<provides>video</provides>
+	</extension>
+	<extension point="xbmc.addon.metadata">
+		<summary lang="en">Independent, ad-free, uncensored comedy.</summary>
+		<description lang="en">Independent, ad-free, uncensored comedy.
+
+Subscription required.</description>
+		<platform>all</platform>
+		<license />
+		<language>en</language>
+		<website />
+		<source>https://github.com/LouisBrunner/kodi-addons</source>
+		<news>First release</news>
+		<assets>
+			<icon>icon.png</icon>
+			<fanart>fanart.png</fanart>
+		</assets>
+	</extension>
+</addon>
