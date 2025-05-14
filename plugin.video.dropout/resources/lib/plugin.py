@@ -161,9 +161,20 @@ def settings(*, sttngs: Settings, api: API):
 
 @router.route
 def show_collection(
-    *, sttngs: Settings, api: API, collection_id: str = "", collection_page: str = ""
+    *,
+    sttngs: Settings,
+    api: API,
+    collection_id: str,
+    page: str = "1",
 ):
-    pass
+    id = int(collection_id)
+    collection = api.get_collection(id)
+    return render_page(
+        router,
+        action="show_collection",
+        title=collection.name,
+        page=api.get_collection_items(collection=id, page=int(page)),
+    )
 
 
 @router.route

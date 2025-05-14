@@ -16,6 +16,7 @@ class Addon:
     XBMC = _XBMC
     PATH = _XBMC.getAddonInfo("path")
     CONFIG = Config(xbmcvfs.translatePath(f"special://profile/addon_data/{_ID}"))
+    PLAYER_VIDEO_ID = f"{_ID}.video_id"
 
     @classmethod
     def handle(cls) -> int:

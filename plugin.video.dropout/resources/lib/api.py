@@ -18,6 +18,7 @@ USER_FINDER = r'_current_user":{"id":([^,]+),"'
 EMBED_FINDER = r'(?s)window\.VHX\.config\s*=\s*{.*embed_url:\s*"([^"]*)",'
 CONFIG_FINDER = r"(?s)window\.OTTData\s*=\s*({.*})\s*</script>"
 EMBED_ID_FINDER = r"https://embed\.vhx\.tv/videos/(\d+)\?"
+COLLECTION_ID_FINDER = r"https://api\.vhx\.tv/collections/(\d+)/items"
 
 
 @dataclass
@@ -36,7 +37,11 @@ class Collection:
     slug: str
     name: str
     items_count: int
-    thumbnail: str
+    thumbnail: Union[str, Assets]
+    short_description: Optional[str]
+    description: Optional[str]
+    created_at: Optional[datetime.datetime]
+    updated_at: Optional[datetime.datetime]
     is_in_list: bool = False
 
 
@@ -408,6 +413,19 @@ class API:
         )
         return self.__parse_com_page(res, page)
 
+    def get_collection(self, collection: int) -> Collection:
+        res = self.__api_request(f"/collections/{collection}", use_tv=False)
+        if res is None:
+            raise ValueError(f"could not get collection {collection}")
+        log_message(
+            f"collection {collection}: {res}",
+            level=LOGDEBUG,
+        )
+        return self.__parse_collection(res, extended=True)
+
+    def get_collection_items(self, *, page: int, collection: int) -> PaginatedMedia:
+        return self.__get_from_collection(page=page, collection=collection)
+
     def get_series(self, *, page: int = 1) -> PaginatedMedia:
         return self.__get_from_collection(page=page, collection=_VHX_ALL_SERIES_ID)
 
@@ -630,7 +648,7 @@ class API:
                     f"found collection {item}, embedded={is_embedded}",
                     level=LOGDEBUG,
                 )
-                media = self.__parse_collection(item, is_embedded=is_embedded)
+                media = self.__parse_collection(item, embedded=is_embedded)
             case _:
                 raise ValueError(f"unknown type {item['type']}")
         if is_my_list:
@@ -864,13 +882,23 @@ class API:
             page=1,
             collection=item["id"],
         )
-        if len(page.items) != 1:
+        vid = None
+        for i in page.items:
+            if not isinstance(i, Video):
+                continue
+            if vid is None or vid.duration_s > i.duration_s:
+                vid = i
+                break
+        # FIXME: are some video unavailable then?
+        if vid is None:
             raise ValueError(
-                f"invalid reply for collection (movie) {item['id']}: {page.items}"
+                f"invalid type for collection (movie) {item['id']}: {page.items}"
             )
-        vid = page.items[0]
-        if not isinstance(vid, Video):
-            raise ValueError(f"invalid type for collection (movie) {item['id']}: {vid}")
+        if len(page.items) > 1:
+            log_message(
+                f"found {len(page.items)} videos in collection {item['id']}, using {vid}, full list: {page.items}",
+                level=LOGWARNING,
+            )
 
         return Movie(
             entity_id=vid.entity_id,
@@ -929,17 +957,42 @@ class API:
     ]
 
     def __parse_collection(
-        self, item: dict, *, is_embedded: bool = False
+        self, item: dict, *, embedded: bool = False, extended: bool = False
     ) -> Collection:
+        dateformat = "%Y-%m-%dT%H:%M:%S.%fZ" if not embedded else "%Y-%m-%dT%H:%M:%SZ"
         slug = item["slug"]
         if slug in self._RESERVED_CATEGORIES:
             raise ValueError("internal category, skipping")
+        id = item.get("id")
+        if id is None:
+            link_info = re.search(COLLECTION_ID_FINDER, item["_links"]["items"]["href"])
+            if link_info is None:
+                raise ValueError("could not find id in collection")
+            id = int(link_info.group(1))
+        name = None
+        if extended:
+            name = item["title"]
+        else:
+            name = item["name"]
+        assets = None
+        if extended:
+            assets = self.__assets_from_item(item, embedded=embedded)
+        else:
+            assets = item["thumbnail"]["source"]
         return Collection(
-            entity_id=item.get("id", 0),  # some views don't add them
+            entity_id=id,
             slug=slug,
-            name=item["name"],
+            name=name,
             items_count=item["items_count"],
-            thumbnail=item["thumbnail"]["source"],
+            thumbnail=assets,
+            short_description=item["short_description"] if extended else None,
+            description=item["description"] if extended else None,
+            created_at=datetime.datetime.strptime(item["created_at"], dateformat)
+            if extended
+            else None,
+            updated_at=datetime.datetime.strptime(item["updated_at"], dateformat)
+            if extended
+            else None,
         )
 
     def __embed_for_slug(self, slug: str) -> str:

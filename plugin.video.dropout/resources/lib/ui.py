@@ -106,13 +106,21 @@ class Folder:
         }
 
     @classmethod
+    def __add_prefix(cls, prefix: str, name: str) -> str:
+        if Addon.debug():
+            return f"{prefix} | {name}"
+        return name
+
+    @classmethod
     def info_for_playable(
         cls, *, router: Router, video: Playable, path: str
     ) -> xbmcgui.ListItem:
         list_item = xbmcgui.ListItem(
-            label=video.title, label2=video.short_description, path=path
+            label=cls.__add_prefix("VID", video.title),
+            label2=video.short_description,
+            path=path,
         )
-        list_item.setProperty("video_id", str(video.entity_id))
+        list_item.setProperty(Addon.PLAYER_VIDEO_ID, str(video.entity_id))
         list_item.setProperty("IsPlayable", "true")
         if isinstance(video, Movie):
             list_item.setArt(cls.__assets_to_arts(video.assets))
@@ -191,18 +199,10 @@ class Folder:
                     f"RunPlugin({router.url_for('add_to_list', entity_type=typ, entity_id=video.entity_id)})",
                 ),
             )
-        # if isinstance(video, Movie):
-        #     collection_args = {
-        #         "collection_page": video.collection_page,
-        #     }
-        # else:
-        collection_args = {
-            "collection_id": video.collection_id,
-        }
         contextmenu.append(
             (
                 _(_.GO_TO_COLLECTION),
-                f"RunPlugin({router.url_for('show_collection', **collection_args)})",
+                f"RunPlugin({router.url_for('show_collection', collection_id=video.collection_id)})",
             )
         )
         contextmenu.append(cls.__get_settings_menu(router))
@@ -240,7 +240,9 @@ class Folder:
         path = router.url_for("show_series", entity_id=series.entity_id)
 
         list_item = xbmcgui.ListItem(
-            label=series.title, label2=series.short_description, path=path
+            label=self.__add_prefix("SER", series.title),
+            label2=series.short_description,
+            path=path,
         )
         list_item.setProperty("IsPlayable", "false")
         list_item.setArt(self.__assets_to_arts(series.assets))
@@ -278,12 +280,6 @@ class Folder:
                     f"RunPlugin({router.url_for('add_to_list', entity_type='series', entity_id=series.entity_id)})",
                 )
             )
-        contextmenu.append(
-            (
-                _(_.GO_TO_COLLECTION),
-                f"RunPlugin({router.url_for('show_collection', collection_page= series.collection_page)})",
-            )
-        )
         list_item.addContextMenuItems(
             contextmenu,
             replaceItems=True,
@@ -302,16 +298,29 @@ class Folder:
         router: Router,
         collection: Collection,
     ) -> None:
-        path = router.url_for("show_collection", entity_id=collection.entity_id)
+        path = router.url_for("show_collection", collection_id=collection.entity_id)
 
-        list_item = xbmcgui.ListItem(label=collection.name, path=path)
+        list_item = xbmcgui.ListItem(
+            label=self.__add_prefix("COL", collection.name),
+            label2=collection.short_description or "",
+            path=path,
+        )
         list_item.setProperty("IsPlayable", "false")
-        list_item.setArt(self.__thumbnail_to_arts(collection.thumbnail))
+        if isinstance(collection.thumbnail, str):
+            list_item.setArt(self.__thumbnail_to_arts(collection.thumbnail))
+        else:
+            list_item.setArt(self.__assets_to_arts(collection.thumbnail))
         list_item.setInfo("video", {})
 
         info_tag: xbmc.InfoTagVideo = list_item.getVideoInfoTag()
         info_tag.setTitle(collection.name)
-        info_tag.setTagLine(collection.name)
+        info_tag.setTagLine(collection.short_description or collection.name)
+        if collection.description is not None:
+            info_tag.setPlot(collection.description)
+        if collection.short_description is not None:
+            info_tag.setPlotOutline(collection.short_description)
+        if collection.created_at is not None:
+            info_tag.setDateAdded(collection.created_at.strftime(KODI_DATETIME_FORMAT))
         info_tag.setMediaType("tvshow")
 
         contextmenu = []
@@ -363,12 +372,14 @@ def render_page(
     router: Router,
     *,
     action: str,
-    title: int,
+    title: int | str,
     page: PaginatedMedia,
     content: str = "videos",
 ) -> None:
     folder = Folder(
-        _(_.PAGE_TITLE).format(page=page.page, title=_(title)),
+        _(_.PAGE_TITLE).format(
+            page=page.page, title=_(title) if isinstance(title, int) else title
+        ),
         content="videos",
         total_items=len(page.items),
     )

@@ -33,7 +33,11 @@ class MonitorPlayer(xbmc.Player):
 
     def onPlayBackStarted(self) -> None:
         li: xbmcgui.ListItem = self.getPlayingItem()
-        self.playing = int(li.getProperty("video_id"))
+        video_id = li.getProperty(Addon.PLAYER_VIDEO_ID)
+        if video_id is None or video_id == "":
+            log_message("No video ID found, cannot update play state")
+            return
+        self.playing = int(video_id)
         log_message(f"Playback started: {self.playing}")
 
     def onPlayBackPaused(self) -> None:
