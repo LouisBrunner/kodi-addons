@@ -1,16 +1,17 @@
 import datetime
+import hashlib
 import html
 import json
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Set, Tuple, Union, cast
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 from urllib.parse import urlencode
 
 import requests
 from bs4 import BeautifulSoup, Tag
 
 from .addon import Addon
-from .config import PlayState
+from .config import Credentials, PlayState
 from .utils import LOGDEBUG, LOGERROR, LOGNONE, LOGWARNING, log_message
 
 TOKEN_FINDER = r'(?s)window\.VHX\.config\s*=\s*{.*token:\s*"([^"]*)",'
@@ -107,7 +108,21 @@ class Movie(Video):
     trailer_url: Optional[Union[str, int]]
 
 
-Media = Union[Collection, Series, Video, Movie]
+@dataclass
+class Season:
+    entity_id: int
+    title: str
+    slug: str
+    season_number: int
+    episodes_count: int
+    trailer_url: Optional[Union[str, int]]
+    thumbnail: str
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
+    is_in_list: bool = False
+
+
+Media = Union[Collection, Series, Season, Video, Movie]
 Playable = Union[Video, Movie]
 
 
@@ -135,11 +150,7 @@ _VHX_ALL_SERIES_ID = 243176
 _VHX_TRENDING_ID = 239409
 
 
-class APICache:
-    my_list: Optional[Set[int]] = None
-
-
-cached = APICache()
+# TODO: is it worth caching using If-None-Match?
 
 
 class API:
@@ -157,15 +168,56 @@ class API:
         cookies = requests.utils.cookiejar_from_dict(Addon.CONFIG.get_cookie_jar())
         self.__session.cookies.update(cookies)
 
+        self.__my_list: Optional[set[int]] = None
         self.__token = None
         self.__user_id = None
 
         self.logged_in = False
         self.has_subscription = False
 
-        self.__ensure_logged_in()
+        creds = Addon.CONFIG.get_credentials()
 
-    def __ensure_logged_in(self) -> bool:
+        self.__ensure_logged_in(creds)
+
+        if creds is None and self.logged_in and self.has_subscription:
+            assert self.__token is not None
+            assert self.__user_id is not None
+            log_message(
+                f"caching credentials {self.__token}/{self.__user_id}", level=LOGDEBUG
+            )
+            Addon.CONFIG.set_credentials(
+                Credentials(
+                    hash=self.__calculate_hash(),
+                    token=self.__token,
+                    user_id=self.__user_id,
+                    when=datetime.datetime.now(),
+                )
+            )
+
+    def __calculate_hash(self) -> str:
+        username, password = self.__credentials
+        return hashlib.md5(f"{username}{password}".encode("utf-8")).hexdigest()
+
+    def __ensure_logged_in(self, creds: Optional[Credentials]) -> bool:
+        if creds is not None:
+            hash = self.__calculate_hash()
+            now = datetime.datetime.now()
+            if hash == creds.hash and now - creds.when < datetime.timedelta(minutes=5):
+                self.__token = creds.token
+                self.__user_id = creds.user_id
+                self.logged_in = True
+                self.has_subscription = True
+                log_message(
+                    f"using cached credentials {self.__token}/{self.__user_id}",
+                    level=LOGDEBUG,
+                )
+                return True
+            log_message(
+                f"not using cash {hash} != {creds.hash} or expired {now - creds.when}",
+                level=LOGDEBUG,
+            )
+            Addon.CONFIG.set_credentials(None)
+
         if self.__update_from_website():
             return True
 
@@ -312,7 +364,7 @@ class API:
         self.__token = None
 
     def __ensure_has_my_list(self) -> None:
-        if cached.my_list is not None:
+        if self.__my_list is not None:
             return
 
         url = f"/customers/{self.__user_id}/watchlist"
@@ -326,7 +378,7 @@ class API:
             use_tv=True,
         )
         final = self.__parse_media(res, from_tv=True, fast=True, is_my_list=True)
-        cached.my_list = set([i.entity_id for i in final])
+        self.__my_list = set([i.entity_id for i in final])
 
     def get_new_releases(self, *, page: int = 1) -> PaginatedMedia:
         return self.__get_from_collection(page=page, collection=_VHX_NEW_RELEASES_ID)
@@ -413,7 +465,21 @@ class API:
         )
         return self.__parse_com_page(res, page)
 
-    def get_collection(self, collection: int) -> Collection:
+    def search(self, *, query: str, page: int) -> PaginatedMedia:
+        self.__ensure_has_my_list()
+        res = self.__api_request(
+            "/search",
+            params={
+                "q": query,
+                "type": ",".join(["video", "collection", "live_event", "product"]),
+                "page": page,
+                "per_page": self.DEFAULT_PER_PAGE,
+            },
+            use_tv=False,
+        )
+        return self.__parse_com_page(res, page, items="results")
+
+    def __get_collection(self, collection: int, *, types: List[str]) -> dict:
         res = self.__api_request(f"/collections/{collection}", use_tv=False)
         if res is None:
             raise ValueError(f"could not get collection {collection}")
@@ -421,12 +487,26 @@ class API:
             f"collection {collection}: {res}",
             level=LOGDEBUG,
         )
-        return self.__parse_collection(res, extended=True)
+        if res["type"] not in types:
+            raise ValueError(f"invalid type for {collection} (expected {types}): {res}")
+        return res
+
+    def get_collection(self, collection: int) -> Collection:
+        return self.__parse_collection(
+            self.__get_collection(collection, types=["collection", "category"]),
+            extended=True,
+        )
+
+    def get_series(self, series: int) -> Series:
+        return self.__parse_series(self.__get_collection(series, types=["series"]))
+
+    def get_season(self, season: int) -> Series:
+        return self.__parse_series(self.__get_collection(season, types=["season"]))
 
     def get_collection_items(self, *, page: int, collection: int) -> PaginatedMedia:
         return self.__get_from_collection(page=page, collection=collection)
 
-    def get_series(self, *, page: int = 1) -> PaginatedMedia:
+    def get_all_series(self, *, page: int = 1) -> PaginatedMedia:
         return self.__get_from_collection(page=page, collection=_VHX_ALL_SERIES_ID)
 
     def get_trending(self, *, page: int = 1) -> PaginatedMedia:
@@ -578,7 +658,7 @@ class API:
         return items
 
     def __parse_com_page(
-        self, res: Optional[dict], current_page: int
+        self, res: Optional[dict], current_page: int, *, items: str = "items"
     ) -> PaginatedMedia:
         if res is None:
             return PaginatedMedia(items=[], page=current_page, next_page=None)
@@ -587,7 +667,7 @@ class API:
         if pagination["count"] >= pagination["page"] * pagination["per_page"]:
             next_page = pagination["page"] + 1
         return PaginatedMedia(
-            items=self.__parse_media(res["items"], from_tv=False),
+            items=self.__parse_media(res[items], from_tv=False),
             page=pagination["page"],
             next_page=next_page,
         )
@@ -637,6 +717,12 @@ class API:
                 )
                 media = self.__parse_movie(item, embedded=is_embedded)
                 need_play_state = True
+            case "season":
+                log_message(
+                    f"found season {item}, embedded={is_embedded}",
+                    level=LOGDEBUG,
+                )
+                media = self.__parse_season(item, embedded=is_embedded)
             case "series":
                 log_message(
                     f"found series {item}, embedded={is_embedded}",
@@ -653,8 +739,8 @@ class API:
                 raise ValueError(f"unknown type {item['type']}")
         if is_my_list:
             media.is_in_list = True
-        elif cached.my_list is not None:
-            media.is_in_list = media.entity_id in cached.my_list
+        elif self.__my_list is not None:
+            media.is_in_list = media.entity_id in self.__my_list
         return media, need_play_state
 
     def __parse_media(
@@ -920,6 +1006,20 @@ class API:
             is_in_list=vid.is_in_list,
             assets=self.__assets_from_item(item, embedded=embedded),
             trailer_url=trailer_url,
+        )
+
+    def __parse_season(self, item: dict, *, embedded: bool = False) -> Season:
+        dateformat = "%Y-%m-%dT%H:%M:%S.%fZ" if not embedded else "%Y-%m-%dT%H:%M:%SZ"
+        return Season(
+            entity_id=item["id"],
+            title=item["title"],
+            slug=item["slug"],
+            season_number=item["season_number"],
+            episodes_count=item["episodes_count"],
+            trailer_url=item.get("trailer_video_id"),
+            thumbnail=item["thumbnails"]["16_9"]["source"],
+            created_at=datetime.datetime.strptime(item["created_at"], dateformat),
+            updated_at=datetime.datetime.strptime(item["updated_at"], dateformat),
         )
 
     def __parse_series(self, item: dict, *, embedded: bool = False) -> Series:

@@ -14,8 +14,23 @@ class PlayState:
     from_us: bool = False
 
 
+@dataclass
+class Search:
+    search: str
+    first: datetime.datetime
+
+
+@dataclass
+class Credentials:
+    hash: str
+    token: str
+    user_id: int
+    when: datetime.datetime
+
+
 class Config:
     _COOKIEJAR_FILE = "cookiejar.json"
+    _CREDENTIALS_FILE = "credentials.json"
     _PLAYSTATE_FILE = "playstate.json"
     _SEARCHES_FILE = "searches.json"
 
@@ -67,9 +82,16 @@ class Config:
         current_playstate[str(video_id)] = playstate_data
         self.__write_json_file(self._PLAYSTATE_FILE, current_playstate)
 
-    def get_searches(self) -> List[str]:
+    def get_searches(self) -> List[Search]:
         searches = self.__read_json_file(self._SEARCHES_FILE, dfault={})
-        return searches.get("searches", [])
+        res = searches.get("searches", [])
+        return [
+            Search(
+                search=s["search"],
+                first=datetime.datetime.fromisoformat(s["first"]),
+            )
+            for s in res
+        ]
 
     def add_search(self, search: str) -> None:
         searches = self.__read_json_file(self._SEARCHES_FILE, dfault={})
@@ -88,10 +110,33 @@ class Config:
     def remove_search(self, search: str) -> None:
         searches = self.__read_json_file(self._SEARCHES_FILE, dfault={})
         searches["searches"] = searches.get("searches", [])
-        searches["searches"] = [
-            s for s in searches["searches"] if s["search"] != search
-        ]
+        searches["searches"] = list(
+            filter(lambda s: s["search"] != search, searches["searches"])
+        )
         self.__write_json_file(self._SEARCHES_FILE, searches)
+
+    def get_credentials(self) -> Optional[Credentials]:
+        credentials = self.__read_json_file(self._CREDENTIALS_FILE, dfault={})
+        if not credentials:
+            return None
+        return Credentials(
+            hash=credentials["hash"],
+            token=credentials["token"],
+            user_id=credentials["user_id"],
+            when=datetime.datetime.fromisoformat(credentials["when"]),
+        )
+
+    def set_credentials(self, credentials: Optional[Credentials]) -> None:
+        if credentials is None:
+            os.remove(self.__get_path(self._CREDENTIALS_FILE))
+            return
+        credentials_data = {
+            "hash": credentials.hash,
+            "token": credentials.token,
+            "user_id": credentials.user_id,
+            "when": credentials.when.isoformat(),
+        }
+        self.__write_json_file(self._CREDENTIALS_FILE, credentials_data)
 
     def __get_path(self, file: str) -> str:
         return os.path.join(self.__path, file)

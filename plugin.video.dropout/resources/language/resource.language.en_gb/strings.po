@@ -140,10 +140,30 @@ msgctxt "#32126"
 msgid "Removed from my list"
 msgstr ""
 
-msgctxt "#32127"
-msgid "Go to collection"
-msgstr ""
-
 msgctxt "#32128"
 msgid "Go to series"
+msgstr ""
+
+msgctxt "#32129"
+msgid "Season {season}"
+msgstr ""
+
+msgctxt "#32130"
+msgid "{title} - {season}"
+msgstr ""
+
+msgctxt "#32131"
+msgid "New search"
+msgstr ""
+
+msgctxt "#32132"
+msgid "Results for '{query}'"
+msgstr ""
+
+msgctxt "#32133"
+msgid "Remove search"
+msgstr ""
+
+msgctxt "#32134"
+msgid "Go to season"
 msgstr ""

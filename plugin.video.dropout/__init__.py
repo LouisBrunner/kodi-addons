@@ -1,5 +1,5 @@
 # TODO:
-#  - add caching If-None-Match
-#  - implement show series
-#  - implement search
+#  - search doesn't search
+#  - series listing doesn't work
+#  - season listing doesn't work
 #  - CI

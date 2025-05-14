@@ -1,5 +1,5 @@
 import os
-from typing import Callable, Dict, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import xbmc
 import xbmcgui
@@ -52,6 +52,7 @@ class Folder:
         label: int | str,
         path: str,
         special_sort: Optional[str] = None,
+        contexts: Optional[List[Tuple[str, str]]] = None,
     ) -> None:
         if isinstance(label, int):
             label = _(label)
@@ -70,6 +71,7 @@ class Folder:
         )
         list_item.addContextMenuItems(
             [
+                *(contexts if contexts is not None else []),
                 self.__get_settings_menu(router),
             ],
             replaceItems=True,
@@ -182,6 +184,14 @@ class Folder:
             if video.play_state.completed:
                 info_tag.setPlaycount(1)
 
+        if not isinstance(video, Movie):
+            contextmenu.append(
+                (
+                    _(_.GO_TO_SEASON),
+                    f"RunPlugin({router.url_for('show_season', entity_id=video.collection_id)})",
+                )
+            )
+
         typ = "video" if isinstance(video, Video) else "movie"
         if video.is_in_list:
             contextmenu.insert(
@@ -199,12 +209,6 @@ class Folder:
                     f"RunPlugin({router.url_for('add_to_list', entity_type=typ, entity_id=video.entity_id)})",
                 ),
             )
-        contextmenu.append(
-            (
-                _(_.GO_TO_COLLECTION),
-                f"RunPlugin({router.url_for('show_collection', collection_id=video.collection_id)})",
-            )
-        )
         contextmenu.append(cls.__get_settings_menu(router))
         list_item.addContextMenuItems(
             contextmenu,
@@ -355,9 +359,7 @@ class Folder:
 
 
 class Dialog:
-    def __init__(
-        self, *, title: int, message: int, on_ok: Optional[Callable] = None
-    ) -> None:
+    def __init__(self, *, title: int, message: int, on_ok: Callable[[], None]) -> None:
         self.__title = _(title)
         self.__message = _(message)
         self.__on_ok = on_ok
@@ -365,7 +367,19 @@ class Dialog:
     def render(self):
         dialog = xbmcgui.Dialog()
         if dialog.ok(self.__title, self.__message):
-            self.__on_ok() if self.__on_ok else None
+            self.__on_ok()
+
+
+class TextDialog:
+    def __init__(self, *, title: int, on_ok: Callable[[str], None]) -> None:
+        self.__title = _(title)
+        self.__on_ok = on_ok
+
+    def render(self) -> None:
+        dialog = xbmcgui.Dialog()
+        res = dialog.input(self.__title)
+        if res != "":
+            self.__on_ok(res)
 
 
 def render_page(
@@ -375,7 +389,7 @@ def render_page(
     title: int | str,
     page: PaginatedMedia,
     content: str = "videos",
-) -> None:
+) -> Folder:
     folder = Folder(
         _(_.PAGE_TITLE).format(
             page=page.page, title=_(title) if isinstance(title, int) else title
@@ -413,7 +427,7 @@ def render_page(
             ),
             special_sort="bottom",
         )
-    folder.render()
+    return folder
 
 
 def refresh() -> None:
