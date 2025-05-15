@@ -4,12 +4,15 @@ import subprocess
 
 
 def generate_html_for_folder(folder: str) -> None:
+    index_page = "index.html"
     print(f"Generating HTML for {folder}")
     subprocess.run(
         [
             "tree",
             "-L",
             "1",
+            "-T",
+            os.path.basename(folder),
             "-H",
             "./",
             "--houtro",
@@ -18,9 +21,9 @@ def generate_html_for_folder(folder: str) -> None:
             "-s",
             "-D",
             "-I",
-            "index.html",
+            index_page,
             "-o",
-            "index.html",
+            index_page,
         ],
         cwd=folder,
     )

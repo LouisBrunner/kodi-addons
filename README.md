@@ -6,7 +6,7 @@ In this repository you can find my Kodi Addons:
 
 ## Installation
 
-Download the zip of this repository and install it inside Kodi.
+Add `https://louisbrunner.github.io/kodi-addons/` in Kodi's **File manager** then install `repo.zip` through **Addons > Install from zip file**. You will then get access to all the addons.
 
 ## Issues:
 

@@ -3,6 +3,9 @@ OUT_FOLDER ?= out
 DATADIR ?= $(OUT_FOLDER)/addons
 OUT_REPO ?= $(OUT_FOLDER)/repo.zip
 
+all: build
+.PHONY: all
+
 build:
 	mkdir -p $(DATADIR)
 	python3 vendor/create_repository.py $(ADDONS) --datadir $(DATADIR)
@@ -26,5 +29,6 @@ deploy: clean
 .PHONY: deploy
 
 clean:
+	rm -rf $(OUT_FOLDER)
 	find $(DEV_TARGET) -type f -name "*.pyc" -delete
 .PHONY: clean
