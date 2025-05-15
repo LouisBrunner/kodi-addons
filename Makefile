@@ -1,8 +1,9 @@
 ADDONS = plugin.video.dropout
-DATADIR ?= repo/addons
-OUT_REPO ?= repo.zip
+DATADIR ?= out/addons
+OUT_REPO ?= out/repo.zip
 
 build:
+	mkdir -p $(DATADIR)
 	python3 vendor/create_repository.py $(ADDONS) --datadir $(DATADIR)
 	zip -r $(OUT_REPO) repo
 .PHONY: build

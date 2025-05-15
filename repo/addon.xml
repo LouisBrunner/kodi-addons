@@ -22,9 +22,5 @@
 		<description
     >This repository contains Louis Brunner's collection of Kodi addons</description>
 		<platform>all</platform>
-		<assets>
-			<icon>icon.png</icon>
-			<fanart>fanart.png</fanart>
-		</assets>
 	</extension>
 </addon>
