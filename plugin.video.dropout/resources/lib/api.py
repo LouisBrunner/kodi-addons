@@ -82,7 +82,21 @@ class VideoReleaseDate:
 
 
 @dataclass
-class Video:
+class UnreleasedVideo:
+    entity_id: int
+    title: str
+    trailer_slug: str
+    short_description: str
+    description: str
+    duration_s: int
+    thumbnail: str
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
+    is_in_list: bool = False
+
+
+@dataclass
+class ReleasedVideo:
     entity_id: int
     collection_id: int
     title: str
@@ -102,8 +116,11 @@ class Video:
     is_in_list: bool = False
 
 
+Video = Union[UnreleasedVideo, ReleasedVideo]
+
+
 @dataclass(kw_only=True)
-class Movie(Video):
+class Movie(ReleasedVideo):
     assets: Assets
     trailer_url: Optional[Union[str, int]]
 
@@ -399,7 +416,7 @@ class API:
         log_message(f"continue watching [FROM API]: {res}", level=LOGDEBUG)
         res.items = list(
             filter(
-                lambda i: not isinstance(i, Video)
+                lambda i: not isinstance(i, ReleasedVideo)
                 or i.play_state is None
                 or not i.play_state.completed
                 or not i.play_state.from_us,
@@ -428,7 +445,7 @@ class API:
                 res.items,
                 key=lambda i: (
                     i.play_state.last_seen
-                    if isinstance(i, Video) and i.play_state is not None
+                    if isinstance(i, ReleasedVideo) and i.play_state is not None
                     else datetime.datetime.min
                 ),
                 reverse=True,
@@ -703,13 +720,17 @@ class API:
                     level=LOGDEBUG,
                 )
                 media = self.__parse_video(item, embedded=is_embedded)
-                if "_embedded" in item and "play_state" in item["_embedded"]:
+                if (
+                    "_embedded" in item
+                    and "play_state" in item["_embedded"]
+                    and isinstance(media, ReleasedVideo)
+                ):
                     media.play_state = self.__if_more_recent(
                         media.play_state,
                         self.__parse_play_state(item["_embedded"]["play_state"]),
                     )
                 else:
-                    need_play_state = True
+                    need_play_state = isinstance(media, ReleasedVideo)
             case "movie":
                 log_message(
                     f"found movie {item}, embedded={is_embedded}",
@@ -789,6 +810,8 @@ class API:
     def __parse_playable(self, item: dict, *, embedded: bool) -> Playable:
         if item.get("type") == "video":
             media = self.__parse_video(item, embedded=embedded)
+            if isinstance(media, UnreleasedVideo):
+                raise ValueError(f"cannot play unreleased video {item['id']}: {media}")
             if "_embedded" in item and "play_state" in item["_embedded"]:
                 media.play_state = self.__if_more_recent(
                     media.play_state,
@@ -836,6 +859,19 @@ class API:
         return data["entries"]
 
     def __parse_video(self, item: dict, *, embedded: bool = False) -> Video:
+        dateformat = "%Y-%m-%dT%H:%M:%S.%fZ" if not embedded else "%Y-%m-%dT%H:%M:%SZ"
+        if "metadata" not in item:
+            return UnreleasedVideo(
+                entity_id=item["id"],
+                title=item["title"],
+                trailer_slug=item["url"],
+                short_description=item["short_description"],
+                description=item["description"],
+                duration_s=item["duration"]["seconds"],
+                thumbnail=item["thumbnail"]["source"],
+                created_at=datetime.datetime.strptime(item["created_at"], dateformat),
+                updated_at=datetime.datetime.strptime(item["updated_at"], dateformat),
+            )
         metadata = item["metadata"]
         series = None
         season = None
@@ -901,9 +937,8 @@ class API:
             slug = item["slug"]
         else:
             slug = item["url"]
-        dateformat = "%Y-%m-%dT%H:%M:%S.%fZ" if not embedded else "%Y-%m-%dT%H:%M:%SZ"
         tags = metadata["tags"] if not embedded else item["tags"]
-        return Video(
+        return ReleasedVideo(
             entity_id=item["id"],
             collection_id=item["canonical_collection_id"],
             title=item["title"],
@@ -984,6 +1019,11 @@ class API:
             log_message(
                 f"found {len(page.items)} videos in collection {item['id']}, using {vid}, full list: {page.items}",
                 level=LOGWARNING,
+            )
+
+        if not isinstance(vid, ReleasedVideo):
+            raise ValueError(
+                f"cannot use unreleased video for movie {item['id']}: {vid}"
             )
 
         return Movie(

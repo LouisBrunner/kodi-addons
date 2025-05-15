@@ -7,3 +7,7 @@ In this repository you can find my Kodi Addons:
 ## Installation
 
 Download the zip of this repository and install it inside Kodi.
+
+## Issues:
+
+ * Search doesn't automatically search (some kind of race condition?)

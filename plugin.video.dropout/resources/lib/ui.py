@@ -12,13 +12,16 @@ from .api import (
     Movie,
     PaginatedMedia,
     Playable,
+    Season,
     Series,
+    UnreleasedVideo,
     Video,
     VideoData,
     thumbnail_formatter,
 )
 from .language import _
 from .router import Router
+from .utils import LOGWARNING, log_message
 
 KODI_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
@@ -151,46 +154,50 @@ class Folder:
                 info_tag.setTrailer(path)
             info_tag.setMediaType("movie")
 
-        info_tag.setTags(video.tags)
-        if video.release_dates is not None and len(video.release_dates) > 0:
-            info_tag.setFirstAired(
-                video.release_dates[0].date.strftime(KODI_DATETIME_FORMAT)
-            )
-            info_tag.setYear(video.release_dates[0].date.year)
-            info_tag.setCountries([video.release_dates[0].location])
-
-        if video.season is not None:
-            info_tag.setTvShowTitle(video.season.name)
-            info_tag.setSeason(video.season.number)
-            if video.season.episode_number is not None:
-                info_tag.setEpisode(video.season.episode_number)
-            info_tag.setMediaType("episode")
-        else:
+        if isinstance(video, UnreleasedVideo):
             info_tag.setMediaType("video")
 
-        if video.series is not None:
-            contextmenu.append(
-                (
-                    _(_.GO_TO_SERIES),
-                    f"RunPlugin({router.url_for('show_series', entity_id=video.series.id)})",
+        else:
+            info_tag.setTags(video.tags)
+            if video.release_dates is not None and len(video.release_dates) > 0:
+                info_tag.setFirstAired(
+                    video.release_dates[0].date.strftime(KODI_DATETIME_FORMAT)
                 )
-            )
+                info_tag.setYear(video.release_dates[0].date.year)
+                info_tag.setCountries([video.release_dates[0].location])
 
-        if video.play_state is not None:
-            info_tag.setResumePoint(video.play_state.duration_s, video.duration_s)
-            info_tag.setLastPlayed(
-                video.play_state.last_seen.strftime(KODI_DATETIME_FORMAT)
-            )
-            if video.play_state.completed:
-                info_tag.setPlaycount(1)
+            if video.season is not None:
+                info_tag.setTvShowTitle(video.season.name)
+                info_tag.setSeason(video.season.number)
+                if video.season.episode_number is not None:
+                    info_tag.setEpisode(video.season.episode_number)
+                info_tag.setMediaType("episode")
+            else:
+                info_tag.setMediaType("video")
 
-        if not isinstance(video, Movie):
-            contextmenu.append(
-                (
-                    _(_.GO_TO_SEASON),
-                    f"RunPlugin({router.url_for('show_season', entity_id=video.collection_id)})",
+            if video.series is not None:
+                contextmenu.append(
+                    (
+                        _(_.GO_TO_SERIES),
+                        f"RunPlugin({router.url_for('show_series', entity_id=video.series.id)})",
+                    )
                 )
-            )
+
+            if video.play_state is not None:
+                info_tag.setResumePoint(video.play_state.duration_s, video.duration_s)
+                info_tag.setLastPlayed(
+                    video.play_state.last_seen.strftime(KODI_DATETIME_FORMAT)
+                )
+                if video.play_state.completed:
+                    info_tag.setPlaycount(1)
+
+            if not isinstance(video, Movie):
+                contextmenu.append(
+                    (
+                        _(_.GO_TO_SEASON),
+                        f"RunPlugin({router.url_for('show_season', entity_id=video.collection_id)})",
+                    )
+                )
 
         typ = "video" if isinstance(video, Video) else "movie"
         if video.is_in_list:
@@ -223,7 +230,12 @@ class Folder:
         router: Router,
         video: Playable,
     ) -> None:
-        path = router.url_for("play", slug=video.slug)
+        path = router.url_for(
+            "play",
+            slug=video.trailer_slug
+            if isinstance(video, UnreleasedVideo)
+            else video.slug,
+        )
 
         list_item = self.info_for_playable(router=router, video=video, path=path)
 
@@ -258,7 +270,8 @@ class Folder:
         info_tag.setTagLine(series.short_description)
         info_tag.setPlot(series.description)
         info_tag.setDateAdded(series.created_at.strftime(KODI_DATETIME_FORMAT))
-        if series.trailer_url is not None:
+        # FIXME: if we set a trailer on a folder, then clicking the folder tries (and fails) to play the trailer
+        if series.trailer_url is not None and False:
             path = None
             if isinstance(series.trailer_url, int):
                 path = router.url_for("play", id=series.trailer_url)
@@ -282,6 +295,62 @@ class Folder:
                 (
                     _(_.ADD_TO_LIST),
                     f"RunPlugin({router.url_for('add_to_list', entity_type='series', entity_id=series.entity_id)})",
+                )
+            )
+        list_item.addContextMenuItems(
+            contextmenu,
+            replaceItems=True,
+        )
+        xbmcplugin.addDirectoryItem(
+            self.__handle,
+            path,
+            list_item,
+            isFolder=True,
+            totalItems=self.__total_items if self.__total_items else 0,
+        )
+
+    def add_season(
+        self,
+        *,
+        router: Router,
+        season: Season,
+    ) -> None:
+        path = router.url_for("show_season", entity_id=season.entity_id)
+
+        list_item = xbmcgui.ListItem(
+            label=self.__add_prefix("SEA", season.title), path=path
+        )
+        list_item.setProperty("IsPlayable", "false")
+        list_item.setArt(self.__thumbnail_to_arts(season.thumbnail))
+        list_item.setInfo("video", {})
+
+        info_tag: xbmc.InfoTagVideo = list_item.getVideoInfoTag()
+        info_tag.setTitle(season.title)
+        info_tag.setDateAdded(season.created_at.strftime(KODI_DATETIME_FORMAT))
+        # FIXME: if we set a trailer on a folder, then clicking the folder tries (and fails) to play the trailer
+        if season.trailer_url is not None and False:
+            path = None
+            if isinstance(season.trailer_url, int):
+                path = router.url_for("play", id=season.trailer_url)
+            else:
+                path = router.url_for("play", slug=os.path.basename(season.trailer_url))
+            info_tag.setTrailer(path)
+        info_tag.setMediaType("season")
+        info_tag.setSeason(season.season_number)
+
+        contextmenu = []
+        if season.is_in_list:
+            contextmenu.append(
+                (
+                    _(_.REMOVE_FROM_LIST),
+                    f"RunPlugin({router.url_for('remove_from_list', entity_type='series', entity_id=season.entity_id)})",
+                )
+            )
+        else:
+            contextmenu.append(
+                (
+                    _(_.ADD_TO_LIST),
+                    f"RunPlugin({router.url_for('add_to_list', entity_type='series', entity_id=season.entity_id)})",
                 )
             )
         list_item.addContextMenuItems(
@@ -417,6 +486,10 @@ def render_page(
             folder.add_collection(router=router, collection=medium)
         elif isinstance(medium, Series):
             folder.add_series(router=router, series=medium)
+        elif isinstance(medium, Season):
+            folder.add_season(router=router, season=medium)
+        else:
+            log_message(f"Unknown medium type: {type(medium)}", level=LOGWARNING)
     if page.next_page is not None:
         folder.add_folder(
             router=router,
