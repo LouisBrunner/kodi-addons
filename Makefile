@@ -1,12 +1,18 @@
 ADDONS = plugin.video.dropout
-DATADIR ?= out/addons
-OUT_REPO ?= out/repo.zip
+OUT_FOLDER ?= out
+DATADIR ?= $(OUT_FOLDER)/addons
+OUT_REPO ?= $(OUT_FOLDER)/repo.zip
 
 build:
 	mkdir -p $(DATADIR)
 	python3 vendor/create_repository.py $(ADDONS) --datadir $(DATADIR)
 	zip -r $(OUT_REPO) repo
+	python3 tools/create_listing.py out
 .PHONY: build
+
+serve:
+	python3 -m http.server -d $(OUT_FOLDER)
+.PHONY: serve
 
 DEV_TARGET ?= plugin.video.dropout
 KODI_HOST ?= root@libreelec.local
