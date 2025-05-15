@@ -7,9 +7,11 @@ on:
 
 jobs:
   build:
+    name: Build repository
     runs-on: ubuntu-latest
     steps:
-      - name: Build repository
+      - uses: actions/checkout@v4
+      - name: Build zips
         run: make
 
       - name: Upload static files as artifact
@@ -29,8 +31,8 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
 
+    name: Deploy to GitHub Pages
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
+      - id: deployment
         uses: actions/deploy-pages@v4
