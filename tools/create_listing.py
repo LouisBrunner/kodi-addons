@@ -11,7 +11,7 @@ def generate_html_for_folder(folder: str) -> None:
             "-L",
             "1",
             "-H",
-            "",
+            "./",
             "--houtro",
             "",
             "--dirsfirst",
