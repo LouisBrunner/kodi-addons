@@ -164,7 +164,7 @@ _VHX_SITE_ID = 36348
 _VHX_PRODUCT_ID = 28599
 _VHX_NEW_RELEASES_ID = 129054
 _VHX_ALL_SERIES_ID = 243176
-_VHX_TRENDING_ID = 239409
+_VHX_TRENDING_ID = 1151509
 
 
 # TODO: is it worth caching using If-None-Match?
@@ -970,7 +970,9 @@ class API:
                 else None,
                 fanart=adds["aspect_ratio_16_9_background"]["source"],
                 landscape=adds["aspect_ratio_16_9_background"]["source"],
-                banner=adds["aspect_ratio_16_6"]["source"],
+                banner=adds["aspect_ratio_16_6"]["source"]
+                if adds["aspect_ratio_16_6"] is not None
+                else None,
                 thumb=item["thumbnail"]["source"],
             )
         else:

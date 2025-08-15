@@ -3,7 +3,7 @@
   id="plugin.video.dropout"
   name="Dropout.tv"
   provider-name="LouisBrunner"
-  version="0.0.1"
+  version="0.0.2"
 >
 	<requires>
 		<import addon="xbmc.python" version="3.0.1" />
@@ -28,7 +28,9 @@ Subscription required.</description>
 		<language>en</language>
 		<website />
 		<source>https://github.com/LouisBrunner/kodi-addons</source>
-		<news>First release</news>
+		<news>v0.0.2 (2025-08-15)
+- Fixed an error with certain shows which don't have a banner
+- Correctly display the trending page again</news>
 		<assets>
 			<icon>icon.png</icon>
 			<fanart>fanart.png</fanart>
