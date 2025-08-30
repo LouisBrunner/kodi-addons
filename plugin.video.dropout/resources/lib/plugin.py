@@ -191,6 +191,7 @@ def search_results(*, sttngs: Settings, api: API, search: str, page: str = "1"):
         action="search_results",
         title=_(_.SEARCH_RESULTS_FOR).format(query=search),
         page=api.search(query=search, page=int(page)),
+        extra={"search": search},
     )
 
 
@@ -228,18 +229,20 @@ def show_collection(
         action="show_collection",
         title=collection.name,
         page=api.get_collection_items(collection=id, page=int(page)),
+        extra={"collection_id": collection_id},
     )
 
 
 @router.route
-def show_series(*, sttngs: Settings, api: API, entity_id: str):
+def show_series(*, sttngs: Settings, api: API, entity_id: str, page: str = "1"):
     id = int(entity_id)
     series = api.get_series(id)
     return render_page(
         router,
         action="show_series",
         title=series.title,
-        page=api.get_collection_items(collection=id, page=1),
+        page=api.get_collection_items(collection=id, page=int(page)),
+        extra={"entity_id": entity_id},
     )
 
 
@@ -252,6 +255,7 @@ def show_season(*, sttngs: Settings, api: API, entity_id: str, page: str = "1"):
         action="show_season",
         title=season.title,
         page=api.get_collection_items(collection=id, page=int(page)),
+        extra={"entity_id": entity_id},
         content="episodes",
     )
 

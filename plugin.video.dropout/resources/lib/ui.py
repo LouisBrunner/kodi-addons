@@ -1,5 +1,5 @@
 import os
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import xbmc
 import xbmcgui
@@ -458,16 +458,17 @@ def render_page(
     title: int | str,
     page: PaginatedMedia,
     content: str = "videos",
+    extra: dict[str, Any] = {},
 ) -> Folder:
     folder = Folder(
         _(_.PAGE_TITLE).format(
             page=page.page, title=_(title) if isinstance(title, int) else title
         ),
-        content="videos",
+        content=content,
         total_items=len(page.items),
     )
     if page.page > 1:
-        kwargs = {}
+        kwargs = extra.copy()
         if page.page > 2:
             kwargs["page"] = page.page - 1
         folder.add_folder(
@@ -497,6 +498,7 @@ def render_page(
             path=router.url_for(
                 action,
                 page=page.next_page,
+                **extra,
             ),
             special_sort="bottom",
         )
