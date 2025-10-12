@@ -172,6 +172,7 @@ _VHX_TRENDING_ID = 1151509
 
 class API:
     WEBSITE_URL = "https://www.dropout.tv"
+    REFERER_URL = "https://watch.dropout.tv"
     API_URL_COM = "https://api.vhx.com"
     API_URL_TV = "https://api.vhx.tv"
     API_PREFIX = f"/v2/sites/{_VHX_SITE_ID}"
@@ -1150,7 +1151,7 @@ class API:
         embed_page = requests.get(
             url,
             headers={
-                "Referer": self.WEBSITE_URL,
+                "Referer": self.REFERER_URL,
             },
         )
         config_info = re.search(CONFIG_FINDER, embed_page.text)

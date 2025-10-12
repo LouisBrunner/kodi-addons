@@ -3,7 +3,7 @@
   id="plugin.video.dropout"
   name="Dropout.tv"
   provider-name="LouisBrunner"
-  version="0.0.3"
+  version="0.0.4"
 >
 	<requires>
 		<import addon="xbmc.python" version="3.0.1" />
@@ -28,7 +28,10 @@ Subscription required.</description>
 		<language>en</language>
 		<website />
 		<source>https://github.com/LouisBrunner/kodi-addons</source>
-		<news>v0.0.3 (2025-08-30)
+		<news>v0.0.4 (2025-10-12)
+- Fix media not playing by adapting the referer URL
+
+v0.0.3 (2025-08-30)
 - Fixed an error when going on the second page on some screens (season episodes, search, etc)
 
 v0.0.2 (2025-08-15)
