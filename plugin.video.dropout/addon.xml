@@ -3,7 +3,7 @@
   id="plugin.video.dropout"
   name="Dropout.tv"
   provider-name="LouisBrunner"
-  version="0.0.4"
+  version="0.0.5"
 >
 	<requires>
 		<import addon="xbmc.python" version="3.0.1" />
@@ -28,7 +28,11 @@ Subscription required.</description>
 		<language>en</language>
 		<website />
 		<source>https://github.com/LouisBrunner/kodi-addons</source>
-		<news>v0.0.4 (2025-10-12)
+		<news>v0.0.5 (2025-12-10)
+- Use new website URL (#43)
+- Fix recursion bug when a movie is in your watchlist
+
+v0.0.4 (2025-10-12)
 - Fix media not playing by adapting the referer URL
 
 v0.0.3 (2025-08-30)
