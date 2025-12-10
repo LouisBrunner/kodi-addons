@@ -171,7 +171,7 @@ _VHX_TRENDING_ID = 1151509
 
 
 class API:
-    WEBSITE_URL = "https://www.dropout.tv"
+    WEBSITE_URL = "https://watch.dropout.tv"
     REFERER_URL = "https://watch.dropout.tv"
     API_URL_COM = "https://api.vhx.com"
     API_URL_TV = "https://api.vhx.tv"
@@ -399,6 +399,7 @@ class API:
         self.__my_list = set([i.entity_id for i in final])
 
     def get_new_releases(self, *, page: int = 1) -> PaginatedMedia:
+        self.__ensure_has_my_list()
         return self.__get_from_collection(page=page, collection=_VHX_NEW_RELEASES_ID)
 
     def get_continue_watching(self, *, page: int = 1) -> PaginatedMedia:
@@ -469,8 +470,9 @@ class API:
         )
         return self.__parse_tv_page(res, page, is_my_list=True)
 
-    def __get_from_collection(self, *, page: int, collection: int) -> PaginatedMedia:
-        self.__ensure_has_my_list()
+    def __get_from_collection(
+        self, *, page: int, collection: int, is_my_list: bool = False
+    ) -> PaginatedMedia:
         res = self.__api_request(
             f"/collections/{collection}/items",
             params={
@@ -481,7 +483,7 @@ class API:
             },
             use_tv=False,
         )
-        return self.__parse_com_page(res, page)
+        return self.__parse_com_page(res, page, is_my_list=is_my_list)
 
     def search(self, *, query: str, page: int) -> PaginatedMedia:
         self.__ensure_has_my_list()
@@ -522,12 +524,15 @@ class API:
         return self.__parse_series(self.__get_collection(season, types=["season"]))
 
     def get_collection_items(self, *, page: int, collection: int) -> PaginatedMedia:
+        self.__ensure_has_my_list()
         return self.__get_from_collection(page=page, collection=collection)
 
     def get_all_series(self, *, page: int = 1) -> PaginatedMedia:
+        self.__ensure_has_my_list()
         return self.__get_from_collection(page=page, collection=_VHX_ALL_SERIES_ID)
 
     def get_trending(self, *, page: int = 1) -> PaginatedMedia:
+        self.__ensure_has_my_list()
         return self.__get_from_collection(page=page, collection=_VHX_TRENDING_ID)
 
     def get_featured(self, *, page: int = 1) -> PaginatedMedia:
@@ -651,6 +656,10 @@ class API:
                 log_message(msg, level=LOGERROR)
                 break
             log_message(
+                f"api request pages to {url} ({next_url}) returned {res.status_code}",
+                level=LOGDEBUG,
+            )
+            log_message(
                 f"api request pages to {url} ({next_url}) returned {res.status_code} with {res.json()}",
                 level=LOGNONE,
             )
@@ -672,11 +681,20 @@ class API:
                 next_url = pagination["template_url"].format(
                     page=pagination["page"] + 1, per_page=pagination["per_page"]
                 )
+        log_message(
+            f"finished request to {url} with {len(items)} items",
+            level=LOGDEBUG,
+        )
 
         return items
 
     def __parse_com_page(
-        self, res: Optional[dict], current_page: int, *, items: str = "items"
+        self,
+        res: Optional[dict],
+        current_page: int,
+        *,
+        items: str = "items",
+        is_my_list: bool = False,
     ) -> PaginatedMedia:
         if res is None:
             return PaginatedMedia(items=[], page=current_page, next_page=None)
@@ -685,7 +703,7 @@ class API:
         if pagination["count"] >= pagination["page"] * pagination["per_page"]:
             next_page = pagination["page"] + 1
         return PaginatedMedia(
-            items=self.__parse_media(res[items], from_tv=False),
+            items=self.__parse_media(res[items], from_tv=False, is_my_list=is_my_list),
             page=pagination["page"],
             next_page=next_page,
         )
@@ -737,7 +755,9 @@ class API:
                     f"found movie {item}, embedded={is_embedded}",
                     level=LOGDEBUG,
                 )
-                media = self.__parse_movie(item, embedded=is_embedded)
+                media = self.__parse_movie(
+                    item, embedded=is_embedded, is_my_list=is_my_list
+                )
                 need_play_state = True
             case "season":
                 log_message(
@@ -996,15 +1016,16 @@ class API:
             )
         return assets
 
-    def __parse_movie(self, item: dict, *, embedded: bool = False) -> Movie:
+    def __parse_movie(
+        self, item: dict, *, embedded: bool = False, is_my_list: bool = False
+    ) -> Movie:
         trailer_url = None
         if embedded:
             trailer_url = item.get("trailer_url")
         else:
             trailer_url = item.get("trailer_video_id")
         page = self.__get_from_collection(
-            page=1,
-            collection=item["id"],
+            page=1, collection=item["id"], is_my_list=is_my_list
         )
         vid = None
         for i in page.items:
