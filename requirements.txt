@@ -1,4 +1,4 @@
 Kodistubs==21.0.0
 beautifulsoup4==4.14.3
 requests==2.32.5
-ruff==0.14.8
+ruff==0.14.9
