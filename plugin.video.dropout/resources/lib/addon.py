@@ -39,5 +39,9 @@ class Addon:
         cls.XBMC.setSetting("password", "")
 
     @classmethod
+    def use_inputstream_adaptive(cls) -> bool:
+        return cls.XBMC.getSettings().getBool("use_inputstream_adaptive")
+
+    @classmethod
     def settings(cls) -> Settings:
         return Settings()
