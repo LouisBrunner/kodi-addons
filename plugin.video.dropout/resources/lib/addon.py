@@ -40,7 +40,18 @@ class Addon:
 
     @classmethod
     def use_inputstream_adaptive(cls) -> bool:
-        return cls.XBMC.getSettings().getBool("use_inputstream_adaptive")
+        return (
+            cls.XBMC.getSettings().getBool("use_inputstream_adaptive")
+            and cls.is_inputstream_adaptive_available()
+        )
+
+    @classmethod
+    def is_inputstream_adaptive_available(cls) -> bool:
+        try:
+            addon = xbmcaddon.Addon("inputstream.adaptive")
+            return addon is not None
+        except RuntimeError:
+            return False
 
     @classmethod
     def settings(cls) -> Settings:
