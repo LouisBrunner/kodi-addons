@@ -10,7 +10,7 @@
 		<import addon="xbmc.addon" version="20.90.101" />
 		<import addon="script.module.beautifulsoup4" version="4.12.2" />
 		<import addon="script.module.requests" version="2.31.0" />
-		<import addon="inputstream.adaptive" version="21.5.13" />
+		<import addon="inputstream.adaptive" version="21.0.0" optional="true" />
 	</requires>
 	<extension point="xbmc.python.pluginsource" library="entry.py" provides="video">
 		<provides>video</provides>

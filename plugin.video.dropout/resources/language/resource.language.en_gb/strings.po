@@ -26,6 +26,10 @@ msgctxt "#32003"
 msgid "Debug Mode"
 msgstr ""
 
+msgctxt "#32004"
+msgid "Use InputStream Adaptive"
+msgstr ""
+
 msgctxt "#32010"
 msgid "General"
 msgstr ""
@@ -40,6 +44,10 @@ msgstr ""
 
 msgctxt "#32013"
 msgid "Debugging"
+msgstr ""
+
+msgctxt "#32014"
+msgid "Playback"
 msgstr ""
 
 msgctxt "#32101"

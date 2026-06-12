@@ -520,5 +520,8 @@ def notify(message: int, *, time: int) -> None:
 def play_video(router: Router, media: Playable, data: VideoData) -> None:
     li = Folder.info_for_playable(router=router, video=media, path=data.url)
     li.setMimeType(data.mime_type)
+    li.setContentLookup(False)
     li.setSubtitles(data.subtitles)
+    if Addon.use_inputstream_adaptive():
+        li.setProperty("inputstream", "inputstream.adaptive")
     xbmcplugin.setResolvedUrl(Addon.handle(), succeeded=True, listitem=li)
