@@ -357,7 +357,10 @@ class API:
             level=LOGNONE,
         )
         rep = self.__session.request(
-            method, "".join([self.WEBSITE_URL, url]), data=data, timeout=REQUEST_TIMEOUT_S
+            method,
+            "".join([self.WEBSITE_URL, url]),
+            data=data,
+            timeout=REQUEST_TIMEOUT_S,
         )
         Addon.CONFIG.set_cookie_jar(
             requests.utils.dict_from_cookiejar(self.__session.cookies)
@@ -420,10 +423,12 @@ class API:
         log_message(f"continue watching [FROM API]: {res}", level=LOGDEBUG)
         res.items = list(
             filter(
-                lambda i: not isinstance(i, ReleasedVideo)
-                or i.play_state is None
-                or not i.play_state.completed
-                or not i.play_state.from_us,
+                lambda i: (
+                    not isinstance(i, ReleasedVideo)
+                    or i.play_state is None
+                    or not i.play_state.completed
+                    or not i.play_state.from_us
+                ),
                 res.items,
             )
         )
