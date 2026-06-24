@@ -14,6 +14,8 @@ from .addon import Addon
 from .config import Credentials, PlayState
 from .utils import LOGDEBUG, LOGERROR, LOGNONE, LOGWARNING, log_message
 
+REQUEST_TIMEOUT_S = (10, 30)
+
 TOKEN_FINDER = r'(?s)window\.VHX\.config\s*=\s*{.*token:\s*"([^"]*)",'
 USER_FINDER = r'_current_user":{"id":([^,]+),"'
 EMBED_FINDER = r'(?s)window\.VHX\.config\s*=\s*{.*embed_url:\s*"([^"]*)",'
@@ -355,7 +357,7 @@ class API:
             level=LOGNONE,
         )
         rep = self.__session.request(
-            method, "".join([self.WEBSITE_URL, url]), data=data
+            method, "".join([self.WEBSITE_URL, url]), data=data, timeout=REQUEST_TIMEOUT_S
         )
         Addon.CONFIG.set_cookie_jar(
             requests.utils.dict_from_cookiejar(self.__session.cookies)
@@ -607,6 +609,7 @@ class API:
             headers={
                 "Authorization": f"Bearer {self.__token}",
             },
+            timeout=REQUEST_TIMEOUT_S,
         )
         if not res.ok:
             msg = f"api request to {url} ({next_url}) failed with {res.status_code} and {res.text}"
@@ -648,6 +651,7 @@ class API:
                 headers={
                     "Authorization": f"Bearer {self.__token}",
                 },
+                timeout=REQUEST_TIMEOUT_S,
             )
             if not res.ok:
                 msg = f"api request pages to {url} ({next_url}) failed with {res.status_code} and {res.text}"
@@ -1174,6 +1178,7 @@ class API:
             headers={
                 "Referer": self.REFERER_URL,
             },
+            timeout=REQUEST_TIMEOUT_S,
         )
         config_info = re.search(CONFIG_FINDER, embed_page.text)
         if config_info is None:
@@ -1181,7 +1186,7 @@ class API:
                 f"could not find config url in {url} ({embed_page}/{embed_page.text})",
             )
         config_url = json.loads(config_info.group(1))["config_url"]
-        return requests.get(config_url).json()
+        return requests.get(config_url, timeout=REQUEST_TIMEOUT_S).json()
 
     def playable_from_id(self, id: int) -> Tuple[Playable, VideoData]:
         video_res = self.__get_video_by_id(id)
