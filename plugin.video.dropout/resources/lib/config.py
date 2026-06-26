@@ -1,8 +1,7 @@
 import datetime
 import json
-import os
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from pathlib import Path
 
 
 @dataclass
@@ -37,7 +36,7 @@ class Config:
     _MAX_SEARCHES = 15
 
     def __init__(self, path: str) -> None:
-        self.__path = path
+        self.__path = Path(path)
 
     def get_cookie_jar(self) -> dict:
         return self.__read_json_file(self._COOKIEJAR_FILE, dfault={})
@@ -45,7 +44,7 @@ class Config:
     def set_cookie_jar(self, cookiejar: dict) -> None:
         self.__write_json_file(self._COOKIEJAR_FILE, cookiejar)
 
-    def get_playstates(self) -> Dict[int, PlayState]:
+    def get_playstates(self) -> dict[int, PlayState]:
         playstates = self.__read_json_file(self._PLAYSTATE_FILE, dfault={})
         return {
             int(k): PlayState(
@@ -58,7 +57,7 @@ class Config:
             for k, v in playstates.items()
         }
 
-    def get_playstate(self, video_id: int) -> Optional[PlayState]:
+    def get_playstate(self, video_id: int) -> PlayState | None:
         playstates = self.__read_json_file(self._PLAYSTATE_FILE, dfault={})
         if str(video_id) not in playstates:
             return None
@@ -82,7 +81,7 @@ class Config:
         current_playstate[str(video_id)] = playstate_data
         self.__write_json_file(self._PLAYSTATE_FILE, current_playstate)
 
-    def get_searches(self) -> List[Search]:
+    def get_searches(self) -> list[Search]:
         searches = self.__read_json_file(self._SEARCHES_FILE, dfault={})
         res = searches.get("searches", [])
         return [
@@ -100,7 +99,7 @@ class Config:
             searches["searches"].append(
                 {
                     "search": search,
-                    "first": datetime.datetime.now().isoformat(),
+                    "first": datetime.datetime.now(tz=datetime.UTC).isoformat(),
                 }
             )
             if len(searches["searches"]) > self._MAX_SEARCHES:
@@ -110,12 +109,10 @@ class Config:
     def remove_search(self, search: str) -> None:
         searches = self.__read_json_file(self._SEARCHES_FILE, dfault={})
         searches["searches"] = searches.get("searches", [])
-        searches["searches"] = list(
-            filter(lambda s: s["search"] != search, searches["searches"])
-        )
+        searches["searches"] = list(filter(lambda s: s["search"] != search, searches["searches"]))
         self.__write_json_file(self._SEARCHES_FILE, searches)
 
-    def get_credentials(self) -> Optional[Credentials]:
+    def get_credentials(self) -> Credentials | None:
         credentials = self.__read_json_file(self._CREDENTIALS_FILE, dfault={})
         if not credentials:
             return None
@@ -126,9 +123,9 @@ class Config:
             when=datetime.datetime.fromisoformat(credentials["when"]),
         )
 
-    def set_credentials(self, credentials: Optional[Credentials]) -> None:
+    def set_credentials(self, credentials: Credentials | None) -> None:
         if credentials is None:
-            os.remove(self.__get_path(self._CREDENTIALS_FILE))
+            self.__get_path(self._CREDENTIALS_FILE).unlink()
             return
         credentials_data = {
             "hash": credentials.hash,
@@ -138,20 +135,20 @@ class Config:
         }
         self.__write_json_file(self._CREDENTIALS_FILE, credentials_data)
 
-    def __get_path(self, file: str) -> str:
-        return os.path.join(self.__path, file)
+    def __get_path(self, file: str) -> Path:
+        return self.__path / file
 
     def __read_json_file(self, file: str, dfault: dict) -> dict:
         path = self.__get_path(file)
 
-        if not os.path.exists(path):
+        if not path.exists():
             return dfault
 
-        with open(path, "r") as f:
+        with path.open() as f:
             return json.load(f)
 
     def __write_json_file(self, file: str, data: dict) -> None:
         path = self.__get_path(file)
 
-        with open(path, "w") as f:
+        with path.open("w") as f:
             json.dump(data, f)

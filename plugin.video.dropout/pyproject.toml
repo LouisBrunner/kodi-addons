@@ -1,0 +1,40 @@
+[project]
+name = "kodi-dropout"
+version = "0"
+description = "Kodi addon for Dropout.tv"
+readme = "README.md"
+requires-python = "==3.11.9"
+dependencies = [
+  "Kodistubs==21.0.0",
+  "beautifulsoup4==4.14.3",
+  "requests==2.33.0"
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+  "ANN401",  # Dynamically typed expressions (typing.Any) are disallowed
+  # conflicting rules
+  "D203",
+  "D212",
+  "COM812",
+  # they are useful
+  "FIX001",
+  "FIX002",
+  "TD001",
+  "TD002",
+  "TD003",
+  # required name by Kodi
+  "N999",
+  # FIXME: disabled for now, too noisy
+  "D",
+  "DTZ007",
+  "DTZ901",
+]
+
+[tool.uv]
+package = false

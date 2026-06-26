@@ -14,7 +14,7 @@ local_dev_mode = os.getenv("LOCAL_DEV_MODE") is not None
 
 def _log(msg: str, level: int = LOGDEBUG) -> None:
     if local_dev_mode:
-        print(f"[{level}] {msg}")
+        print(f"[{level}] {msg}")  # noqa: T201
     else:
         xbmc.log(msg, level=level)
 

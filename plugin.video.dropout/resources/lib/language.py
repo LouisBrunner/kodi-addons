@@ -36,11 +36,11 @@ class Language:
     GO_TO_SEASON = 32134
 
     @classmethod
-    def __call__(cls, id: int) -> str:
-        text = Addon.XBMC.getLocalizedString(id)
+    def __call__(cls, uid: int) -> str:
+        text = Addon.XBMC.getLocalizedString(uid)
         if text == "":
-            log_message(f"missing string {id}", level=LOGWARNING)
-            text = f"missing string {id}"
+            log_message(f"missing string {uid}", level=LOGWARNING)
+            text = f"missing string {uid}"
         return text
 
 

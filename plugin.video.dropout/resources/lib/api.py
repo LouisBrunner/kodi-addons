@@ -4,11 +4,11 @@ import html
 import json
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, ClassVar
 from urllib.parse import urlencode
 
 import requests
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup
 
 from .addon import Addon
 from .config import Credentials, PlayState
@@ -16,7 +16,7 @@ from .utils import LOGDEBUG, LOGERROR, LOGNONE, LOGWARNING, log_message
 
 REQUEST_TIMEOUT_S = (10, 30)
 
-TOKEN_FINDER = r'(?s)window\.VHX\.config\s*=\s*{.*token:\s*"([^"]*)",'
+TOKEN_FINDER = r'(?s)window\.VHX\.config\s*=\s*{.*token:\s*"([^"]*)",'  # noqa: S105
 USER_FINDER = r'_current_user":{"id":([^,]+),"'
 EMBED_FINDER = r'(?s)window\.VHX\.config\s*=\s*{.*embed_url:\s*"([^"]*)",'
 CONFIG_FINDER = r"(?s)window\.OTTData\s*=\s*({.*})\s*</script>"
@@ -26,11 +26,11 @@ COLLECTION_ID_FINDER = r"https://api\.vhx\.tv/collections/(\d+)/items"
 
 @dataclass
 class Assets:
-    icon: Optional[str]
-    poster: Optional[str]
+    icon: str | None
+    poster: str | None
     fanart: str
     landscape: str
-    banner: Optional[str]
+    banner: str | None
     thumb: str
 
 
@@ -40,24 +40,24 @@ class Collection:
     slug: str
     name: str
     items_count: int
-    thumbnail: Union[str, Assets]
-    short_description: Optional[str]
-    description: Optional[str]
-    created_at: Optional[datetime.datetime]
-    updated_at: Optional[datetime.datetime]
+    thumbnail: str | Assets
+    short_description: str | None
+    description: str | None
+    created_at: datetime.datetime | None
+    updated_at: datetime.datetime | None
     is_in_list: bool = False
 
 
 @dataclass
 class Series:
     entity_id: int
-    collection_page: Optional[str]
+    collection_page: str | None
     title: str
     slug: str
     short_description: str
     description: str
     seasons: int
-    trailer_url: Optional[Union[str, int]]
+    trailer_url: str | int | None
     assets: Assets
     created_at: datetime.datetime
     updated_at: datetime.datetime
@@ -74,7 +74,7 @@ class VideoSeries:
 class VideoSeason:
     name: str
     number: int
-    episode_number: Optional[int]
+    episode_number: int | None
 
 
 @dataclass
@@ -107,24 +107,24 @@ class ReleasedVideo:
     description: str
     url: str
     duration_s: int
-    series: Optional[VideoSeries]
-    season: Optional[VideoSeason]
+    series: VideoSeries | None
+    season: VideoSeason | None
     thumbnail: str
-    tags: List[str]
-    release_dates: Optional[List[VideoReleaseDate]]
+    tags: list[str]
+    release_dates: list[VideoReleaseDate] | None
     created_at: datetime.datetime
     updated_at: datetime.datetime
-    play_state: Optional[PlayState] = None
+    play_state: PlayState | None = None
     is_in_list: bool = False
 
 
-Video = Union[UnreleasedVideo, ReleasedVideo]
+Video = UnreleasedVideo | ReleasedVideo
 
 
 @dataclass(kw_only=True)
 class Movie(ReleasedVideo):
     assets: Assets
-    trailer_url: Optional[Union[str, int]]
+    trailer_url: str | int | None
 
 
 @dataclass
@@ -134,33 +134,30 @@ class Season:
     slug: str
     season_number: int
     episodes_count: int
-    trailer_url: Optional[Union[str, int]]
+    trailer_url: str | int | None
     thumbnail: str
     created_at: datetime.datetime
     updated_at: datetime.datetime
     is_in_list: bool = False
 
 
-Media = Union[Collection, Series, Season, Video, Movie]
-Playable = Union[Video, Movie]
+Media = Collection | Series | Season | Video | Movie
+Playable = Video | Movie
 
 
 @dataclass
 class PaginatedMedia:
-    items: List[Media]
+    items: list[Media]
     page: int
-    next_page: Optional[int]
+    next_page: int | None
 
 
 @dataclass
 class VideoData:
-    subtitles: List[str]
+    subtitles: list[str]
     url: str
     mime_type: str
 
-
-# Sometimes pyright is pywrong
-_SoupResult = Optional[Tag]
 
 _VHX_SITE_ID = 36348
 _VHX_PRODUCT_ID = 28599
@@ -181,14 +178,14 @@ class API:
 
     DEFAULT_PER_PAGE = 25
 
-    def __init__(self, *, credentials: Tuple[str, str]) -> None:
+    def __init__(self, *, credentials: tuple[str, str]) -> None:
         self.__credentials = credentials
 
         self.__session = requests.session()
         cookies = requests.utils.cookiejar_from_dict(Addon.CONFIG.get_cookie_jar())
         self.__session.cookies.update(cookies)
 
-        self.__my_list: Optional[set[int]] = None
+        self.__my_list: set[int] | None = None
         self.__token = None
         self.__user_id = None
 
@@ -200,29 +197,27 @@ class API:
         self.__ensure_logged_in(creds)
 
         if creds is None and self.logged_in and self.has_subscription:
-            assert self.__token is not None
-            assert self.__user_id is not None
-            log_message(
-                f"caching credentials {self.__token}/{self.__user_id}", level=LOGDEBUG
-            )
+            assert self.__token is not None  # noqa: S101
+            assert self.__user_id is not None  # noqa: S101
+            log_message(f"caching credentials {self.__token}/{self.__user_id}", level=LOGDEBUG)
             Addon.CONFIG.set_credentials(
                 Credentials(
                     hash=self.__calculate_hash(),
                     token=self.__token,
                     user_id=self.__user_id,
-                    when=datetime.datetime.now(),
+                    when=datetime.datetime.now(tz=datetime.UTC),
                 )
             )
 
     def __calculate_hash(self) -> str:
         username, password = self.__credentials
-        return hashlib.md5(f"{username}{password}".encode("utf-8")).hexdigest()
+        return hashlib.md5(f"{username}{password}".encode()).hexdigest()  # noqa: S324
 
-    def __ensure_logged_in(self, creds: Optional[Credentials]) -> bool:
+    def __ensure_logged_in(self, creds: Credentials | None) -> bool:
         if creds is not None:
-            hash = self.__calculate_hash()
-            now = datetime.datetime.now()
-            if hash == creds.hash and now - creds.when < datetime.timedelta(minutes=5):
+            hashc = self.__calculate_hash()
+            now = datetime.datetime.now(tz=datetime.UTC)
+            if hashc == creds.hash and now - creds.when < datetime.timedelta(minutes=5):
                 self.__token = creds.token
                 self.__user_id = creds.user_id
                 self.logged_in = True
@@ -233,7 +228,7 @@ class API:
                 )
                 return True
             log_message(
-                f"not using cash {hash} != {creds.hash} or expired {now - creds.when}",
+                f"not using cash {hashc} != {creds.hash} or expired {now - creds.when}",
                 level=LOGDEBUG,
             )
             Addon.CONFIG.set_credentials(None)
@@ -298,11 +293,12 @@ class API:
         res = self.__website_request("/customer_settings/subscription_plans")
         sub_plan = res.json()
         self.logged_in = sub_plan is not None
-        self.has_subscription = sub_plan is not None and not sub_plan.get(
-            "current_plan", {}
-        ).get("has_expired", True)
+        self.has_subscription = sub_plan is not None and not sub_plan.get("current_plan", {}).get("has_expired", True)
         log_message(
-            f"updating status with {res}/{sub_plan} => logged_in={self.logged_in}, has_subscription={self.has_subscription}",
+            (
+                f"updating status with {res}/{sub_plan} => logged_in={self.logged_in}, "
+                f"has_subscription={self.has_subscription}"
+            ),
             level=LOGDEBUG,
         )
         if sub_plan is None:
@@ -313,44 +309,39 @@ class API:
         if meta:
             res = self.__website_request("/")
             soup = BeautifulSoup(res.text, "html.parser")
-            meta_tag = cast(_SoupResult, soup.find("meta", {"name": "csrf-token"}))
+            meta_tag = soup.find("meta", {"name": "csrf-token"})
             if meta_tag is None:
-                raise ValueError(
-                    "internal error: could not get authenticity token (meta not found)"
-                )
+                msg = "internal error: could not get authenticity token (meta not found)"
+                raise ValueError(msg)
             token = meta_tag.attrs.get("content")
             if token is None or token == "":
-                raise ValueError(
-                    "internal error: could not get authenticity token (token not found)"
-                )
+                msg = "internal error: could not get authenticity token (token not found)"
+                raise ValueError(msg)
             return str(token)
 
         res = self.__website_request("/login")
         soup = BeautifulSoup(res.text, "html.parser")
 
-        form = cast(_SoupResult, soup.find(id="login-form-password"))
+        form = soup.find(id="login-form-password")
         if form is None:
-            raise ValueError(
-                "internal error: could not get authenticity token (form not found)"
-            )
-        inpt = cast(_SoupResult, form.find(attrs={"name": "authenticity_token"}))
+            msg = "internal error: could not get authenticity token (form not found)"
+            raise ValueError(msg)
+        inpt = form.find(attrs={"name": "authenticity_token"})
         if inpt is None:
-            raise ValueError(
-                "internal error: could not get authenticity token (input not found)"
-            )
+            msg = "internal error: could not get authenticity token (input not found)"
+            raise ValueError(msg)
         token = inpt.attrs.get("value")
         if token is None or token == "":
-            raise ValueError(
-                "internal error: could not get authenticity token (token not found)"
-            )
+            msg = "internal error: could not get authenticity token (token not found)"
+            raise ValueError(msg)
         return str(token)
 
     def __website_request(
         self,
-        url,
+        url: str,
         *,
         method: str = "GET",
-        data: Optional[Dict[str, Any]] = None,
+        data: dict[str, Any] | None = None,
     ) -> requests.Response:
         log_message(
             f"making website request to {url} with data={data} and cookies={self.__session.cookies}",
@@ -358,13 +349,11 @@ class API:
         )
         rep = self.__session.request(
             method,
-            "".join([self.WEBSITE_URL, url]),
+            f"{self.WEBSITE_URL}{url}",
             data=data,
             timeout=REQUEST_TIMEOUT_S,
         )
-        Addon.CONFIG.set_cookie_jar(
-            requests.utils.dict_from_cookiejar(self.__session.cookies)
-        )
+        Addon.CONFIG.set_cookie_jar(requests.utils.dict_from_cookiejar(self.__session.cookies))
         log_message(
             f"website request to {url} returned {rep.status_code} with {rep.text}",
             level=LOGNONE,
@@ -401,7 +390,7 @@ class API:
             use_tv=True,
         )
         final = self.__parse_media(res, from_tv=True, fast=True, is_my_list=True)
-        self.__my_list = set([i.entity_id for i in final])
+        self.__my_list = {i.entity_id for i in final}
 
     def get_new_releases(self, *, page: int = 1) -> PaginatedMedia:
         self.__ensure_has_my_list()
@@ -436,19 +425,11 @@ class API:
         if page == 1:
             all_play_states = Addon.CONFIG.get_playstates()
             for i in res.items:
-                if isinstance(i, Video):
-                    if i.entity_id in all_play_states:
-                        del all_play_states[i.entity_id]
-            all_play_states = dict(
-                filter(lambda i: not i[1].completed, all_play_states.items())
-            )
-            log_message(
-                f"continue watching [FROM CONFIG]: {all_play_states}", level=LOGDEBUG
-            )
-            extras = [
-                self.__parse_playable(self.__get_video_by_id(i), embedded=True)
-                for i in all_play_states.keys()
-            ]
+                if isinstance(i, Video) and i.entity_id in all_play_states:
+                    del all_play_states[i.entity_id]
+            all_play_states = dict(filter(lambda i: not i[1].completed, all_play_states.items()))
+            log_message(f"continue watching [FROM CONFIG]: {all_play_states}", level=LOGDEBUG)
+            extras = [self.__parse_playable(self.__get_video_by_id(i), embedded=True) for i in all_play_states]
             res.items.extend(extras)
             res.items = sorted(
                 res.items,
@@ -477,9 +458,7 @@ class API:
         )
         return self.__parse_tv_page(res, page, is_my_list=True)
 
-    def __get_from_collection(
-        self, *, page: int, collection: int, is_my_list: bool = False
-    ) -> PaginatedMedia:
+    def __get_from_collection(self, *, page: int, collection: int, is_my_list: bool = False) -> PaginatedMedia:
         res = self.__api_request(
             f"/collections/{collection}/items",
             params={
@@ -498,7 +477,7 @@ class API:
             "/search",
             params={
                 "q": query,
-                "type": ",".join(["video", "collection", "live_event", "product"]),
+                "type": ",".join(["video", "collection", "live_event", "product"]),  # noqa: FLY002
                 "page": page,
                 "per_page": self.DEFAULT_PER_PAGE,
             },
@@ -506,16 +485,18 @@ class API:
         )
         return self.__parse_com_page(res, page, items="results")
 
-    def __get_collection(self, collection: int, *, types: List[str]) -> dict:
+    def __get_collection(self, collection: int, *, types: list[str]) -> dict:
         res = self.__api_request(f"/collections/{collection}", use_tv=False)
         if res is None:
-            raise ValueError(f"could not get collection {collection}")
+            msg = f"could not get collection {collection}"
+            raise ValueError(msg)
         log_message(
             f"collection {collection}: {res}",
             level=LOGDEBUG,
         )
         if res["type"] not in types:
-            raise ValueError(f"invalid type for {collection} (expected {types}): {res}")
+            msg = f"invalid type for {collection} (expected {types}): {res}"
+            raise ValueError(msg)
         return res
 
     def get_collection(self, collection: int) -> Collection:
@@ -571,19 +552,19 @@ class API:
         )
         return self.__parse_tv_page(res, page)
 
-    def add_to_list(self, typ: str, id: int) -> bool:
-        return self.__x_from_list("PUT", typ, id)
+    def add_to_list(self, typ: str, uid: int) -> bool:
+        return self.__x_from_list("PUT", typ, uid)
 
-    def remove_from_list(self, typ: str, id: int) -> bool:
-        return self.__x_from_list("DELETE", typ, id)
+    def remove_from_list(self, typ: str, uid: int) -> bool:
+        return self.__x_from_list("DELETE", typ, uid)
 
-    def __x_from_list(self, method: str, typ: str, id: int) -> bool:
+    def __x_from_list(self, method: str, typ: str, uid: int) -> bool:
         if typ == "movie":
-            params = {"collection": id}
+            params = {"collection": uid}
         else:
             if typ == "series":
                 typ = "collection"
-            params = {typ: f"{self.API_URL_TV}/{typ}s/{id}"}
+            params = {typ: f"{self.API_URL_TV}/{typ}s/{uid}"}
         res = self.__api_request(
             "/me/watchlist",
             method=method,
@@ -598,8 +579,8 @@ class API:
         *,
         use_tv: bool,
         method: str = "GET",
-        params: Optional[Dict[str, Any]] = None,
-    ) -> Optional[dict]:
+        params: dict[str, Any] | None = None,
+    ) -> dict | None:
         base = self.API_URL_TV if use_tv else self.API_URL_COM
         extra_parts = [self.API_PREFIX] if not use_tv else []
         next_url = "".join([base, *extra_parts, url])
@@ -624,7 +605,7 @@ class API:
             return None
 
         out = {}
-        if res.status_code != 204:
+        if res.status_code != 204:  # noqa: PLR2004
             out = res.json()
 
         log_message(
@@ -639,8 +620,8 @@ class API:
         url: str,
         *,
         use_tv: bool,
-        params: Optional[Dict[str, Any]] = None,
-    ) -> List[dict]:
+        params: dict[str, Any] | None = None,
+    ) -> list[dict]:
         base_url = self.API_URL_TV if use_tv else self.API_URL_COM
         extra_parts = [self.API_PREFIX] if not use_tv else []
         next_url = "".join([base_url, *extra_parts, url])
@@ -699,7 +680,7 @@ class API:
 
     def __parse_com_page(
         self,
-        res: Optional[dict],
+        res: dict | None,
         current_page: int,
         *,
         items: str = "items",
@@ -717,25 +698,19 @@ class API:
             next_page=next_page,
         )
 
-    def __parse_tv_page(
-        self, res: Optional[dict], current_page: int, *, is_my_list: bool = False
-    ) -> PaginatedMedia:
+    def __parse_tv_page(self, res: dict | None, current_page: int, *, is_my_list: bool = False) -> PaginatedMedia:
         if res is None:
             return PaginatedMedia(items=[], page=current_page, next_page=None)
         next_page = None
         if res.get("_links", {}).get("next", {}).get("href") is not None:
             next_page = current_page + 1
         return PaginatedMedia(
-            items=self.__parse_media(
-                res["_embedded"]["items"], from_tv=True, is_my_list=is_my_list
-            ),
+            items=self.__parse_media(res["_embedded"]["items"], from_tv=True, is_my_list=is_my_list),
             page=current_page,
             next_page=next_page,
         )
 
-    def __parse_medium(
-        self, item: dict, *, from_tv: bool, is_my_list: bool = False
-    ) -> Tuple[Media, bool]:
+    def __parse_medium(self, item: dict, *, from_tv: bool, is_my_list: bool = False) -> tuple[Media, bool]:  # noqa: ARG002
         is_embedded = True
         if "entity" in item:
             item = item["entity"]
@@ -748,11 +723,7 @@ class API:
                     level=LOGDEBUG,
                 )
                 media = self.__parse_video(item, embedded=is_embedded)
-                if (
-                    "_embedded" in item
-                    and "play_state" in item["_embedded"]
-                    and isinstance(media, ReleasedVideo)
-                ):
+                if "_embedded" in item and "play_state" in item["_embedded"] and isinstance(media, ReleasedVideo):
                     media.play_state = self.__if_more_recent(
                         media.play_state,
                         self.__parse_play_state(item["_embedded"]["play_state"]),
@@ -764,9 +735,7 @@ class API:
                     f"found movie {item}, embedded={is_embedded}",
                     level=LOGDEBUG,
                 )
-                media = self.__parse_movie(
-                    item, embedded=is_embedded, is_my_list=is_my_list
-                )
+                media = self.__parse_movie(item, embedded=is_embedded, is_my_list=is_my_list)
                 need_play_state = True
             case "season":
                 log_message(
@@ -787,7 +756,8 @@ class API:
                 )
                 media = self.__parse_collection(item, embedded=is_embedded)
             case _:
-                raise ValueError(f"unknown type {item['type']}")
+                msg = f"unknown type {item['type']}"
+                raise ValueError(msg)
         if is_my_list:
             media.is_in_list = True
         elif self.__my_list is not None:
@@ -796,12 +766,12 @@ class API:
 
     def __parse_media(
         self,
-        items: List[dict],
+        items: list[dict],
         *,
         from_tv: bool,
         fast: bool = False,
         is_my_list: bool = False,
-    ) -> List[Media]:
+    ) -> list[Media]:
         out = []
         videos = []
         for item in items:
@@ -831,9 +801,10 @@ class API:
                         level=LOGWARNING,
                     )
                     continue
-                out[i].play_state = self.__if_more_recent(
-                    out[i].play_state, self.__parse_play_state(ps)
-                )
+                vid = out[i]
+                if not isinstance(vid, ReleasedVideo):
+                    continue  # internal error!
+                vid.play_state = self.__if_more_recent(vid.play_state, self.__parse_play_state(ps))
 
         return out
 
@@ -841,7 +812,8 @@ class API:
         if item.get("type") == "video":
             media = self.__parse_video(item, embedded=embedded)
             if isinstance(media, UnreleasedVideo):
-                raise ValueError(f"cannot play unreleased video {item['id']}: {media}")
+                msg = f"cannot play unreleased video {item['id']}: {media}"
+                raise ValueError(msg)
             if "_embedded" in item and "play_state" in item["_embedded"]:
                 media.play_state = self.__if_more_recent(
                     media.play_state,
@@ -851,19 +823,16 @@ class API:
         elif item.get("type") == "movie":
             media = self.__parse_movie(item, embedded=embedded)
         else:
-            raise ValueError(f"unknown type {item['type']}")
+            msg = f"unknown type {item['type']}"
+            raise ValueError(msg)
         play_states = self.__get_play_state([media.entity_id])
         for ps in play_states:
             if ps["video_id"] == media.entity_id:
-                media.play_state = self.__if_more_recent(
-                    media.play_state, self.__parse_play_state(ps)
-                )
+                media.play_state = self.__if_more_recent(media.play_state, self.__parse_play_state(ps))
                 break
         return media
 
-    def __if_more_recent(
-        self, current: Optional[PlayState], parsed: PlayState
-    ) -> PlayState:
+    def __if_more_recent(self, current: PlayState | None, parsed: PlayState) -> PlayState:
         if current is None:
             return parsed
         if parsed.last_seen > current.last_seen:
@@ -875,10 +844,10 @@ class API:
             completed=ps["completed"],
             duration_s=ps["duration"],
             timecode=ps["timecode"],
-            last_seen=datetime.datetime.fromtimestamp(ps["timestamp"]),
+            last_seen=datetime.datetime.fromtimestamp(ps["timestamp"], tz=datetime.UTC),
         )
 
-    def __get_play_state(self, video_ids: List[int]) -> List[dict]:
+    def __get_play_state(self, video_ids: list[int]) -> list[dict]:
         data = self.__api_request(
             f"/users/{self.__user_id}/play_state",
             params={"video_ids": ",".join(map(str, video_ids))},
@@ -911,12 +880,11 @@ class API:
                     name=metadata["series"]["name"],
                     id=int(metadata["series"]["id"]),
                 )
-        else:
-            if "series_name" in metadata and "series_id" in metadata:
-                series = VideoSeries(
-                    name=metadata["series_name"],
-                    id=int(metadata["series_id"]),
-                )
+        elif "series_name" in metadata and "series_id" in metadata:
+            series = VideoSeries(
+                name=metadata["series_name"],
+                id=int(metadata["series_id"]),
+            )
         if not embedded:
             if metadata["season"]["name"] is not None:
                 season = VideoSeason(
@@ -926,47 +894,25 @@ class API:
                     if metadata["season"].get("episode_number")
                     else None,
                 )
-        else:
-            if "season_name" in metadata and "season_number" in metadata:
-                season = VideoSeason(
-                    name=metadata["season_name"],
-                    number=int(metadata["season_number"]),
-                    episode_number=int(metadata["episode_number"])
-                    if metadata.get("episode_number")
-                    else None,
-                )
-        rdates = None
-        if not embedded:
-            rdates = metadata["release_dates"]
-        else:
-            rdates = item["release_dates"]
+        elif "season_name" in metadata and "season_number" in metadata:
+            season = VideoSeason(
+                name=metadata["season_name"],
+                number=int(metadata["season_number"]),
+                episode_number=int(metadata["episode_number"]) if metadata.get("episode_number") else None,
+            )
+        rdates = metadata["release_dates"] if not embedded else item["release_dates"]
         release_dates = None
         if rdates is not None:
             release_dates = [
                 VideoReleaseDate(
-                    date=datetime.datetime.strptime(
-                        rdate["date"],
-                        "%Y-%m-%d",
-                    ).date(),
+                    date=datetime.datetime.strptime(rdate["date"], "%Y-%m-%d").date(),
                     location=rdate["location"],
                 )
                 for rdate in rdates
             ]
-        thumbnail = None
-        if not embedded:
-            thumbnail = item["thumbnails"]["16_9"]["source"]
-        else:
-            thumbnail = item["thumbnail"]["source"]
-        url = None
-        if not embedded:
-            url = item["page_url"]
-        else:
-            url = item["_links"]["video_page"]
-        slug = None
-        if not embedded:
-            slug = item["slug"]
-        else:
-            slug = item["url"]
+        thumbnail = item["thumbnails"]["16_9"]["source"] if not embedded else item["thumbnail"]["source"]
+        url = item["page_url"] if not embedded else item["_links"]["video_page"]
+        slug = item["slug"] if not embedded else item["url"]
         tags = metadata["tags"] if not embedded else item["tags"]
         return ReleasedVideo(
             entity_id=item["id"],
@@ -992,50 +938,31 @@ class API:
         if embedded:
             adds = item["additional_images"]
             assets = Assets(
-                icon=adds["aspect_ratio_1_1"]["source"]
-                if "aspect_ratio_1_1" in adds
-                else None,
-                poster=adds["aspect_ratio_2_3"]["source"]
-                if "aspect_ratio_2_3" in adds
-                else None,
+                icon=adds["aspect_ratio_1_1"]["source"] if "aspect_ratio_1_1" in adds else None,
+                poster=adds["aspect_ratio_2_3"]["source"] if "aspect_ratio_2_3" in adds else None,
                 fanart=adds["aspect_ratio_16_9_background"]["source"],
                 landscape=adds["aspect_ratio_16_9_background"]["source"],
-                banner=adds["aspect_ratio_16_6"]["source"]
-                if adds["aspect_ratio_16_6"] is not None
-                else None,
+                banner=adds["aspect_ratio_16_6"]["source"] if adds["aspect_ratio_16_6"] is not None else None,
                 thumb=item["thumbnail"]["source"],
             )
         else:
             thumbs = item["thumbnails"]
             t16_9 = thumbs["16_9"]["source"]
             t16_9_bg = thumbs["16_9_background"]
-            if t16_9_bg is not None:
-                t16_9_bg = t16_9_bg["source"]
-            else:
-                t16_9_bg = t16_9
+            t16_9_bg = t16_9_bg["source"] if t16_9_bg is not None else t16_9
             assets = Assets(
                 icon=thumbs["1_1"]["source"],
                 poster=thumbs["2_3"]["source"],
                 fanart=t16_9_bg,
                 landscape=t16_9_bg,
-                banner=thumbs["16_6"]["source"]
-                if thumbs.get("16_6") is not None
-                else None,
+                banner=thumbs["16_6"]["source"] if thumbs.get("16_6") is not None else None,
                 thumb=t16_9,
             )
         return assets
 
-    def __parse_movie(
-        self, item: dict, *, embedded: bool = False, is_my_list: bool = False
-    ) -> Movie:
-        trailer_url = None
-        if embedded:
-            trailer_url = item.get("trailer_url")
-        else:
-            trailer_url = item.get("trailer_video_id")
-        page = self.__get_from_collection(
-            page=1, collection=item["id"], is_my_list=is_my_list
-        )
+    def __parse_movie(self, item: dict, *, embedded: bool = False, is_my_list: bool = False) -> Movie:
+        trailer_url = item.get("trailer_url") if embedded else item.get("trailer_video_id")
+        page = self.__get_from_collection(page=1, collection=item["id"], is_my_list=is_my_list)
         vid = None
         for i in page.items:
             if not isinstance(i, Video):
@@ -1045,9 +972,8 @@ class API:
                 break
         # FIXME: are some video unavailable then?
         if vid is None:
-            raise ValueError(
-                f"invalid type for collection (movie) {item['id']}: {page.items}"
-            )
+            msg = f"invalid type for collection (movie) {item['id']}: {page.items}"
+            raise ValueError(msg)
         if len(page.items) > 1:
             log_message(
                 f"found {len(page.items)} videos in collection {item['id']}, using {vid}, full list: {page.items}",
@@ -1055,9 +981,8 @@ class API:
             )
 
         if not isinstance(vid, ReleasedVideo):
-            raise ValueError(
-                f"cannot use unreleased video for movie {item['id']}: {vid}"
-            )
+            msg = f"cannot use unreleased video for movie {item['id']}: {vid}"
+            raise TypeError(msg)
 
         return Movie(
             entity_id=vid.entity_id,
@@ -1100,11 +1025,7 @@ class API:
         collection_page = None
         if embedded:
             collection_page = item["_links"]["collection_page"]
-        trailer_url = None
-        if embedded:
-            trailer_url = item.get("trailer_url")
-        else:
-            trailer_url = item.get("trailer_video_id")
+        trailer_url = item.get("trailer_url") if embedded else item.get("trailer_video_id")
         title = item["name"] if embedded else item["title"]
         return Series(
             entity_id=item["id"],
@@ -1120,7 +1041,7 @@ class API:
             updated_at=datetime.datetime.strptime(item["updated_at"], dateformat),
         )
 
-    _RESERVED_CATEGORIES = [
+    _RESERVED_CATEGORIES: ClassVar = [
         "featured",
         "continue-watching",
         "my-list",
@@ -1129,52 +1050,41 @@ class API:
         "all-series",
     ]
 
-    def __parse_collection(
-        self, item: dict, *, embedded: bool = False, extended: bool = False
-    ) -> Collection:
+    def __parse_collection(self, item: dict, *, embedded: bool = False, extended: bool = False) -> Collection:
         dateformat = "%Y-%m-%dT%H:%M:%S.%fZ" if not embedded else "%Y-%m-%dT%H:%M:%SZ"
         slug = item["slug"]
         if slug in self._RESERVED_CATEGORIES:
-            raise ValueError("internal category, skipping")
-        id = item.get("id")
-        if id is None:
+            msg = "internal category, skipping"
+            raise ValueError(msg)
+        iid = item.get("id")
+        if iid is None:
             link_info = re.search(COLLECTION_ID_FINDER, item["_links"]["items"]["href"])
             if link_info is None:
-                raise ValueError("could not find id in collection")
-            id = int(link_info.group(1))
+                msg = "could not find id in collection"
+                raise ValueError(msg)
+            iid = int(link_info.group(1))
         name = None
-        if extended:
-            name = item["title"]
-        else:
-            name = item["name"]
+        name = item["title"] if extended else item["name"]
         assets = None
-        if extended:
-            assets = self.__assets_from_item(item, embedded=embedded)
-        else:
-            assets = item["thumbnail"]["source"]
+        assets = self.__assets_from_item(item, embedded=embedded) if extended else item["thumbnail"]["source"]
         return Collection(
-            entity_id=id,
+            entity_id=iid,
             slug=slug,
             name=name,
             items_count=item["items_count"],
             thumbnail=assets,
             short_description=item["short_description"] if extended else None,
             description=item["description"] if extended else None,
-            created_at=datetime.datetime.strptime(item["created_at"], dateformat)
-            if extended
-            else None,
-            updated_at=datetime.datetime.strptime(item["updated_at"], dateformat)
-            if extended
-            else None,
+            created_at=datetime.datetime.strptime(item["created_at"], dateformat) if extended else None,
+            updated_at=datetime.datetime.strptime(item["updated_at"], dateformat) if extended else None,
         )
 
     def __embed_for_slug(self, slug: str) -> str:
         res = self.__website_request(f"/videos/{slug}")
         embed_info = re.search(EMBED_FINDER, res.text)
         if embed_info is None:
-            raise ValueError(
-                f"could not find embed url for {slug}",
-            )
+            msg = f"could not find embed url for {slug}"
+            raise ValueError(msg)
         return html.unescape(embed_info.group(1))
 
     def __config_from_embed(self, url: str) -> dict:
@@ -1187,40 +1097,39 @@ class API:
         )
         config_info = re.search(CONFIG_FINDER, embed_page.text)
         if config_info is None:
-            raise ValueError(
-                f"could not find config url in {url} ({embed_page}/{embed_page.text})",
-            )
+            msg = f"could not find config url in {url} ({embed_page}/{embed_page.text})"
+            raise ValueError(msg)
         config_url = json.loads(config_info.group(1))["config_url"]
         return requests.get(config_url, timeout=REQUEST_TIMEOUT_S).json()
 
-    def playable_from_id(self, id: int) -> Tuple[Playable, VideoData]:
-        video_res = self.__get_video_by_id(id)
+    def playable_from_id(self, pid: int) -> tuple[Playable, VideoData]:
+        video_res = self.__get_video_by_id(pid)
         embed = self.__embed_for_slug(video_res["url"])
-        return self.__playable_from_id(id, embed, video_res)
+        return self.__playable_from_id(pid, embed, video_res)
 
-    def playable_from_slug(self, slug: str) -> Tuple[Playable, VideoData]:
+    def playable_from_slug(self, slug: str) -> tuple[Playable, VideoData]:
         embed = self.__embed_for_slug(slug)
         id_info = re.search(EMBED_ID_FINDER, embed)
         if id_info is None:
-            raise ValueError(f"could not find id in {embed}")
-        id = int(id_info.group(1))
-        log_message(f"video {id} from {slug}", level=LOGDEBUG)
-        return self.__playable_from_id(id, embed)
+            msg = f"could not find id in {embed}"
+            raise ValueError(msg)
+        pid = int(id_info.group(1))
+        log_message(f"video {pid} from {slug}", level=LOGDEBUG)
+        return self.__playable_from_id(pid, embed)
 
-    def __get_video_by_id(self, id: int) -> dict:
-        video_res = self.__api_request(f"/videos/{id}", use_tv=True)
+    def __get_video_by_id(self, vid: int) -> dict:
+        video_res = self.__api_request(f"/videos/{vid}", use_tv=True)
         if video_res is None:
-            raise ValueError(f"could not find video {id}")
-        log_message(f"video {id}: {video_res}", level=LOGDEBUG)
+            msg = f"could not find video {vid}"
+            raise ValueError(msg)
+        log_message(f"video {vid}: {video_res}", level=LOGDEBUG)
         return video_res
 
-    def __playable_from_id(
-        self, id: int, embed: str, video_res: Optional[dict] = None
-    ) -> Tuple[Playable, VideoData]:
+    def __playable_from_id(self, pid: int, embed: str, video_res: dict | None = None) -> tuple[Playable, VideoData]:
         config = self.__config_from_embed(embed)
-        log_message(f"config for {id}: {config}", level=LOGDEBUG)
+        log_message(f"config for {pid}: {config}", level=LOGDEBUG)
         if video_res is None:
-            video_res = self.__get_video_by_id(id)
+            video_res = self.__get_video_by_id(pid)
 
         subtitles_raw = video_res.get("tracks", {}).get("subtitles", [])
         subtitles = []
@@ -1233,7 +1142,7 @@ class API:
                 subtitles.append(fmt_data["href"])
         playable = self.__parse_playable(video_res, embedded=True)
         formats = config.get("request", {}).get("files", {})
-        if "dash" in formats and False:
+        if "dash" in formats and False:  # noqa: SIM223
             # Kodi supports it but the format sent back is some homebrew JSON instead of a MPD file
             fmt = formats["dash"]
             log_message(f"using dash format for playback {fmt}", level=LOGDEBUG)
@@ -1253,20 +1162,18 @@ class API:
                 mime_type="application/vnd.apple.mpegurl",
             )
         else:
-            raise ValueError(
-                f"could not find playable format for {id}",
-            )
+            msg = f"could not find playable format for {pid}"
+            raise ValueError(msg)
         return playable, data
 
     def __get_best_cdn(self, fmt: dict) -> dict:
         def_cdn = fmt.get("default_cdn")
         cdns = fmt.get("cdns", {})
         if len(cdns) == 0:
-            raise ValueError(
-                "could not find any cdns",
-            )
+            msg = "could not find any cdns"
+            raise ValueError(msg)
         if def_cdn is None or def_cdn not in cdns:
-            def_cdn = list(cdns.keys())[0]
+            def_cdn = next(iter(cdns.keys()))
         return cdns[def_cdn]
 
 
