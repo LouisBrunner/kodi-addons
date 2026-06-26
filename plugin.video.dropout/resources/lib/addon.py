@@ -1,5 +1,4 @@
 import sys
-from typing import Tuple
 
 import xbmcaddon
 import xbmcvfs
@@ -27,7 +26,7 @@ class Addon:
         return cls.XBMC.getSettings().getBool("debug_mode")
 
     @classmethod
-    def credentials(cls) -> Tuple[str, str]:
+    def credentials(cls) -> tuple[str, str]:
         return (
             cls.XBMC.getSettings().getString("username"),
             cls.XBMC.getSettings().getString("password"),
@@ -40,18 +39,15 @@ class Addon:
 
     @classmethod
     def use_inputstream_adaptive(cls) -> bool:
-        return (
-            cls.XBMC.getSettings().getBool("use_inputstream_adaptive")
-            and cls.is_inputstream_adaptive_available()
-        )
+        return cls.XBMC.getSettings().getBool("use_inputstream_adaptive") and cls.is_inputstream_adaptive_available()
 
     @classmethod
     def is_inputstream_adaptive_available(cls) -> bool:
         try:
             addon = xbmcaddon.Addon("inputstream.adaptive")
-            return addon is not None
         except RuntimeError:
             return False
+        return addon is not None
 
     @classmethod
     def settings(cls) -> Settings:

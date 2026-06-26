@@ -2,37 +2,29 @@ name: Build & Deploy
 
 on:
   push:
-    branches:
-      - "main"
+    branches: [main]
 
 jobs:
   build:
     name: Build repository
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     steps:
-      - uses: actions/checkout@v6.0.3
+      - name: Checkout the repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
       - name: Build zips
         run: make
 
-      - name: Upload static files as artifact
-        id: deployment
-        uses: actions/upload-pages-artifact@v5
+      - name: Upload Pages artifact
+        uses: LouisBrunner/.github/.github/actions/upload-pages@main
         with:
           path: out/
 
   deploy:
-    needs: build
-
-    permissions:
-      pages: write
-      id-token: write
-
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
     name: Deploy to GitHub Pages
-    runs-on: ubuntu-latest
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v5
+    needs: [build]
+    uses: LouisBrunner/.github/.github/workflows/deploy-pages.yml@main

@@ -1,11 +1,14 @@
 import datetime
+from typing import TYPE_CHECKING
 
 import xbmc
-import xbmcgui
 
 from .addon import Addon
 from .config import PlayState
 from .utils import log_exception, log_message
+
+if TYPE_CHECKING:
+    import xbmcgui
 
 
 class MonitorPlayer(xbmc.Player):
@@ -14,7 +17,7 @@ class MonitorPlayer(xbmc.Player):
         self.monitor = xbmc.Monitor()
         self.playing = None
 
-    def __update_play_state(self, completed: bool = False) -> None:
+    def __update_play_state(self, *, completed: bool = False) -> None:
         if self.playing is None:
             return
         try:
@@ -26,12 +29,13 @@ class MonitorPlayer(xbmc.Player):
             completed=completed,
             timecode=0,
             duration_s=pos,
-            last_seen=datetime.datetime.now(),
+            last_seen=datetime.datetime.now(tz=datetime.UTC),
         )
         Addon.CONFIG.set_playstate(self.playing, ps)
         log_message(f"Updated play state for video {self.playing}: {ps}")
 
-    def onPlayBackStarted(self) -> None:
+    # @override
+    def onPlayBackStarted(self) -> None:  # noqa: N802
         li: xbmcgui.ListItem = self.getPlayingItem()
         video_id = li.getProperty(Addon.PLAYER_VIDEO_ID)
         if video_id is None or video_id == "":
@@ -40,16 +44,19 @@ class MonitorPlayer(xbmc.Player):
         self.playing = int(video_id)
         log_message(f"Playback started: {self.playing}")
 
-    def onPlayBackPaused(self) -> None:
+    # @override
+    def onPlayBackPaused(self) -> None:  # noqa: N802
         self.__update_play_state()
         log_message("Playback paused")
 
-    def onPlayBackStopped(self) -> None:
+    # @override
+    def onPlayBackStopped(self) -> None:  # noqa: N802
         self.__update_play_state()
         self.playing = None
         log_message("Playback stopped")
 
-    def onPlayBackEnded(self) -> None:
+    # @override
+    def onPlayBackEnded(self) -> None:  # noqa: N802
         self.__update_play_state(completed=True)
         self.playing = None
         log_message("Playback ended")

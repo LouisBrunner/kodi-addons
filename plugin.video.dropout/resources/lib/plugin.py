@@ -1,4 +1,5 @@
 # ruff: noqa: E402
+
 from .patch import monkey_patch
 
 monkey_patch()
@@ -18,7 +19,7 @@ from .utils import log_message
 router = Router(default_action="home")
 
 
-def dispatch():
+def dispatch() -> None:
     path = sys.argv[2][1:]
     log_message(f"entered with: {path}")
 
@@ -26,31 +27,23 @@ def dispatch():
 
 
 @router.route
-def home(*, sttngs: Settings, api: API):
+def home(*, sttngs: Settings, api: API) -> Folder:  # noqa: ARG001
     folder = Folder(_.HOME_TITLE)
 
     if not api.logged_in:
         folder.add_folder(router=router, label=_.LOGIN, path=router.url_for(login))
     elif not api.has_subscription:
-        folder.add_folder(
-            router=router, label=_.LOGIN_WITH_SUBSCRIPTION, path=router.url_for(login)
-        )
+        folder.add_folder(router=router, label=_.LOGIN_WITH_SUBSCRIPTION, path=router.url_for(login))
     else:
-        folder.add_folder(
-            router=router, label=_.FEATURED, path=router.url_for(featured)
-        )
+        folder.add_folder(router=router, label=_.FEATURED, path=router.url_for(featured))
         folder.add_folder(
             router=router,
             label=_.CONTINUE_WATCHING,
             path=router.url_for(continue_watching),
         )
         folder.add_folder(router=router, label=_.MY_LIST, path=router.url_for(my_list))
-        folder.add_folder(
-            router=router, label=_.NEW_RELEASES, path=router.url_for(new_releases)
-        )
-        folder.add_folder(
-            router=router, label=_.TRENDING, path=router.url_for(trending)
-        )
+        folder.add_folder(router=router, label=_.NEW_RELEASES, path=router.url_for(new_releases))
+        folder.add_folder(router=router, label=_.TRENDING, path=router.url_for(trending))
         folder.add_folder(router=router, label=_.SERIES, path=router.url_for(series))
         folder.add_folder(router=router, label=_.BROWSE, path=router.url_for(browse))
         folder.add_folder(router=router, label=_.SEARCH, path=router.url_for(search))
@@ -61,7 +54,7 @@ def home(*, sttngs: Settings, api: API):
 
 
 @router.route
-def login(*, sttngs: Settings, api: API):
+def login(*, sttngs: Settings, api: API) -> Dialog:
     return Dialog(
         title=_.LOGIN_TITLE,
         message=_.LOGIN_MESSAGE,
@@ -70,7 +63,7 @@ def login(*, sttngs: Settings, api: API):
 
 
 @router.route
-def featured(*, sttngs: Settings, api: API, page: str = "1"):
+def featured(*, sttngs: Settings, api: API, page: str = "1") -> Folder:  # noqa: ARG001
     return render_page(
         router,
         action="featured",
@@ -80,7 +73,7 @@ def featured(*, sttngs: Settings, api: API, page: str = "1"):
 
 
 @router.route
-def continue_watching(*, sttngs: Settings, api: API, page: str = "1"):
+def continue_watching(*, sttngs: Settings, api: API, page: str = "1") -> Folder:  # noqa: ARG001
     return render_page(
         router,
         action="continue_watching",
@@ -91,14 +84,12 @@ def continue_watching(*, sttngs: Settings, api: API, page: str = "1"):
 
 
 @router.route
-def my_list(*, sttngs: Settings, api: API, page: str = "1"):
-    return render_page(
-        router, action="my_list", title=_.MY_LIST, page=api.get_my_list(page=int(page))
-    )
+def my_list(*, sttngs: Settings, api: API, page: str = "1") -> Folder:  # noqa: ARG001
+    return render_page(router, action="my_list", title=_.MY_LIST, page=api.get_my_list(page=int(page)))
 
 
 @router.route
-def new_releases(*, sttngs: Settings, api: API, page: str = "1"):
+def new_releases(*, sttngs: Settings, api: API, page: str = "1") -> Folder:  # noqa: ARG001
     return render_page(
         router,
         action="new_releases",
@@ -109,7 +100,7 @@ def new_releases(*, sttngs: Settings, api: API, page: str = "1"):
 
 
 @router.route
-def trending(*, sttngs: Settings, api: API, page: str = "1"):
+def trending(*, sttngs: Settings, api: API, page: str = "1") -> Folder:  # noqa: ARG001
     return render_page(
         router,
         action="trending",
@@ -120,7 +111,7 @@ def trending(*, sttngs: Settings, api: API, page: str = "1"):
 
 
 @router.route
-def series(*, sttngs: Settings, api: API, page: str = "1"):
+def series(*, sttngs: Settings, api: API, page: str = "1") -> Folder:  # noqa: ARG001
     return render_page(
         router,
         action="series",
@@ -131,14 +122,12 @@ def series(*, sttngs: Settings, api: API, page: str = "1"):
 
 
 @router.route
-def browse(*, sttngs: Settings, api: API, page: str = "1"):
-    return render_page(
-        router, action="browse", title=_.BROWSE, page=api.get_browse(page=int(page))
-    )
+def browse(*, sttngs: Settings, api: API, page: str = "1") -> Folder:  # noqa: ARG001
+    return render_page(router, action="browse", title=_.BROWSE, page=api.get_browse(page=int(page)))
 
 
 @router.route
-def search(*, sttngs: Settings, api: API):
+def search(*, sttngs: Settings, api: API) -> Folder:  # noqa: ARG001
     folder = Folder(_.SEARCH)
     folder.add_folder(
         router=router,
@@ -165,18 +154,16 @@ def search(*, sttngs: Settings, api: API):
 
 
 @router.route
-def remove_search(*, sttngs: Settings, api: API, search: str):
+def remove_search(*, sttngs: Settings, api: API, search: str) -> None:  # noqa: ARG001
     Addon.CONFIG.remove_search(search)
     return refresh()
 
 
 @router.route
-def new_search(*, sttngs: Settings, api: API):
-    def on_ok(search: str):
+def new_search(*, sttngs: Settings, api: API) -> TextDialog:  # noqa: ARG001
+    def on_ok(search: str) -> None:
         Addon.CONFIG.add_search(search)
-        xbmc.executebuiltin(
-            f"RunPlugin({router.url_for(search_results, search=search)})"
-        )
+        xbmc.executebuiltin(f"RunPlugin({router.url_for(search_results, search=search)})")
 
     return TextDialog(
         title=_.SEARCH,
@@ -185,7 +172,7 @@ def new_search(*, sttngs: Settings, api: API):
 
 
 @router.route
-def search_results(*, sttngs: Settings, api: API, search: str, page: str = "1"):
+def search_results(*, sttngs: Settings, api: API, search: str, page: str = "1") -> Folder:  # noqa: ARG001
     return render_page(
         router,
         action="search_results",
@@ -196,8 +183,8 @@ def search_results(*, sttngs: Settings, api: API, search: str, page: str = "1"):
 
 
 @router.route
-def logout(*, sttngs: Settings, api: API):
-    def on_ok():
+def logout(*, sttngs: Settings, api: API) -> Dialog:  # noqa: ARG001
+    def on_ok() -> None:
         api.logout()
         Addon.reset_credentials()
         refresh()
@@ -210,78 +197,79 @@ def logout(*, sttngs: Settings, api: API):
 
 
 @router.route
-def settings(*, sttngs: Settings, api: API):
+def settings(*, sttngs: Settings, api: API) -> None:  # noqa: ARG001
     return Addon.XBMC.openSettings()
 
 
 @router.route
 def show_collection(
     *,
-    sttngs: Settings,
+    sttngs: Settings,  # noqa: ARG001
     api: API,
     collection_id: str,
     page: str = "1",
-):
-    id = int(collection_id)
-    collection = api.get_collection(id)
+) -> Folder:
+    cid = int(collection_id)
+    collection = api.get_collection(cid)
     return render_page(
         router,
         action="show_collection",
         title=collection.name,
-        page=api.get_collection_items(collection=id, page=int(page)),
+        page=api.get_collection_items(collection=cid, page=int(page)),
         extra={"collection_id": collection_id},
     )
 
 
 @router.route
-def show_series(*, sttngs: Settings, api: API, entity_id: str, page: str = "1"):
-    id = int(entity_id)
-    series = api.get_series(id)
+def show_series(*, sttngs: Settings, api: API, entity_id: str, page: str = "1") -> Folder:  # noqa: ARG001
+    sid = int(entity_id)
+    series = api.get_series(sid)
     return render_page(
         router,
         action="show_series",
         title=series.title,
-        page=api.get_collection_items(collection=id, page=int(page)),
+        page=api.get_collection_items(collection=sid, page=int(page)),
         extra={"entity_id": entity_id},
     )
 
 
 @router.route
-def show_season(*, sttngs: Settings, api: API, entity_id: str, page: str = "1"):
-    id = int(entity_id)
-    season = api.get_season(id)
+def show_season(*, sttngs: Settings, api: API, entity_id: str, page: str = "1") -> Folder:  # noqa: ARG001
+    sid = int(entity_id)
+    season = api.get_season(sid)
     return render_page(
         router,
         action="show_season",
         title=season.title,
-        page=api.get_collection_items(collection=id, page=int(page)),
+        page=api.get_collection_items(collection=sid, page=int(page)),
         extra={"entity_id": entity_id},
         content="episodes",
     )
 
 
 @router.route
-def play(*, sttngs: Settings, api: API, slug: str = "", id: str = ""):
+def play(*, sttngs: Settings, api: API, slug: str = "", id: str = "") -> None:  # noqa: A002, ARG001
     if slug != "":
         media, data = api.playable_from_slug(slug)
     elif id != "":
         media, data = api.playable_from_id(int(id))
     else:
-        raise ValueError("No slug or id provided")
+        msg = "No slug or id provided"
+        raise ValueError(msg)
     return play_video(router, media, data)
 
 
 @router.route
-def add_to_list(*, sttngs: Settings, api: API, entity_type: str, entity_id: str):
+def add_to_list(*, sttngs: Settings, api: API, entity_type: str, entity_id: str) -> None:  # noqa: ARG001
     if not api.add_to_list(entity_type, int(entity_id)):
-        return
+        return None
     notify(_.NOTIFY_ADD_TO_LIST, time=3000)
     return refresh()
 
 
 @router.route
-def remove_from_list(*, sttngs: Settings, api: API, entity_type: str, entity_id: str):
+def remove_from_list(*, sttngs: Settings, api: API, entity_type: str, entity_id: str) -> None:  # noqa: ARG001
     if not api.remove_from_list(entity_type, int(entity_id)):
-        return
+        return None
     notify(_.NOTIFY_REMOVE_FROM_LIST, time=3000)
     return refresh()

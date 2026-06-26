@@ -1,13 +1,13 @@
 """See https://kodi.wiki/view/Python_Problems#datetime.strptime."""
 
 
-def monkey_patch():
-    import datetime
-    import time
+def monkey_patch() -> None:
+    import datetime  # noqa: PLC0415
+    import time  # noqa: PLC0415
 
-    class proxydt(datetime.datetime):
+    class _ProxyDT(datetime.datetime):
         @classmethod
-        def strptime(cls, date_string, format):
-            return datetime.datetime(*(time.strptime(date_string, format)[:6]))
+        def strptime(cls, date_string: str, fmt: str) -> datetime.datetime:
+            return datetime.datetime(*(time.strptime(date_string, fmt)[:6]))  # noqa: DTZ001
 
-    datetime.datetime = proxydt
+    datetime.datetime = _ProxyDT  # ty:ignore[invalid-assignment]
