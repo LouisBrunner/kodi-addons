@@ -131,7 +131,7 @@ def parse_metadata(metadata_file):
     if addon_metadata.version is None or not re.match(
         VERSION_PATTERN, addon_metadata.version
     ):
-        raise RuntimeError("Invalid add-on verson: {}".format(addon_metadata.version))
+        raise RuntimeError("Invalid add-on version: {}".format(addon_metadata.version))
     return addon_metadata
 
 
