@@ -5,7 +5,7 @@ name = "kodi-dropout"
 version = "0"
 description = "Kodi addon for Dropout.tv"
 readme = "README.md"
-requires-python = "==3.11.9"
+requires-python = ">=3.11.9,<3.12"
 dependencies = [
   "Kodistubs==21.0.0",
   "beautifulsoup4==4.14.3",
