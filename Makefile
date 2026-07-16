@@ -21,7 +21,7 @@ DEV_TARGET ?= plugin.video.dropout
 KODI_HOST ?= root@libreelec.local
 
 dev:
-	fswatch $(DEV_TARGET) --one-per-batch --recursive --latency 1 --verbose | xargs -I{} make deploy
+	hot -d $(DEV_TARGET) make deploy
 .PHONY: dev
 
 deploy: clean
