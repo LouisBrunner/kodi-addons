@@ -326,7 +326,7 @@ class API:
         if form is None:
             msg = "internal error: could not get authenticity token (form not found)"
             raise ValueError(msg)
-        token_input = form.find(attrs={"name": "authenticity_token"})
+        token_input = form.find(name=None, attrs={"name": "authenticity_token"})
         if token_input is None:
             msg = "internal error: could not get authenticity token (input not found)"
             raise ValueError(msg)
