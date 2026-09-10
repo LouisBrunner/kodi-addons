@@ -1,5 +1,7 @@
 """See https://kodi.wiki/view/Python_Problems#datetime.strptime."""
 
+from typing import Self
+
 
 def monkey_patch() -> None:
     import datetime  # noqa: PLC0415
@@ -7,7 +9,7 @@ def monkey_patch() -> None:
 
     class _ProxyDT(datetime.datetime):
         @classmethod
-        def strptime(cls, date_string: str, fmt: str) -> datetime.datetime:
-            return datetime.datetime(*(time.strptime(date_string, fmt)[:6]))  # noqa: DTZ001
+        def strptime(cls, date_string: str, date_format: str, /) -> Self:
+            return cls(*(time.strptime(date_string, date_format)[:6]))
 
     datetime.datetime = _ProxyDT  # ty:ignore[invalid-assignment]
