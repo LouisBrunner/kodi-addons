@@ -182,6 +182,7 @@ class API:
         self.__credentials = credentials
 
         self.__session = requests.session()
+        self.__session.headers.update({"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"})
         cookies = requests.utils.cookiejar_from_dict(Addon.CONFIG.get_cookie_jar())
         self.__session.cookies.update(cookies)
 
