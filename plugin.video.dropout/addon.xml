@@ -3,7 +3,7 @@
   id="plugin.video.dropout"
   name="Dropout.tv"
   provider-name="LouisBrunner"
-  version="0.1.2"
+  version="0.2.0"
 >
 	<requires>
 		<import addon="xbmc.python" version="3.0.1" />
@@ -28,7 +28,13 @@ Subscription required.</description>
 		<language>en</language>
 		<website />
 		<source>https://github.com/LouisBrunner/kodi-addons</source>
-		<news>v0.1.2 (2026-09-18)
+		<news>v0.2.0 (2026-09-21)
+- Partial revert of v0.1.2, with a proper fix to the login page flow
+- Improve sessions reuse for better network performance
+- Cache "My List" to further reduce network requests
+- Fix selection of the main video in a movie collection
+
+v0.1.2 (2026-09-18)
 - Fix login failing because of missing Accept header
 
 v0.1.1 (2026-06-24)

@@ -11,13 +11,13 @@ import requests
 from bs4 import BeautifulSoup
 
 from .addon import Addon
-from .config import Credentials, PlayState
+from .config import Credentials, PlayState, Watchlist
 from .utils import LOGDEBUG, LOGERROR, LOGNONE, LOGWARNING, log_message
 
 REQUEST_TIMEOUT_S = (10, 30)
 
 TOKEN_FINDER = r'(?s)window\.VHX\.config\s*=\s*{.*token:\s*"([^"]*)",'  # noqa: S105
-USER_FINDER = r'_current_user":{"id":([^,]+),"'
+USER_FINDER = r'"user_id":(\d+)'
 EMBED_FINDER = r'(?s)window\.VHX\.config\s*=\s*{.*embed_url:\s*"([^"]*)",'
 CONFIG_FINDER = r"(?s)window\.OTTData\s*=\s*({.*})\s*</script>"
 EMBED_ID_FINDER = r"https://embed\.vhx\.tv/videos/(\d+)\?"
@@ -182,7 +182,6 @@ class API:
         self.__credentials = credentials
 
         self.__session = requests.session()
-        self.__session.headers.update({"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"})
         cookies = requests.utils.cookiejar_from_dict(Addon.CONFIG.get_cookie_jar())
         self.__session.cookies.update(cookies)
 
@@ -320,7 +319,10 @@ class API:
                 raise ValueError(msg)
             return str(token)
 
-        res = self.__website_request("/login")
+        res = self.__website_request(
+            "/login",
+            headers={"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"},
+        )
         soup = BeautifulSoup(res.text, "html.parser")
 
         form = soup.find(id="login-form-password")
@@ -343,6 +345,7 @@ class API:
         *,
         method: str = "GET",
         data: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> requests.Response:
         log_message(
             f"making website request to {url} with data={data} and cookies={self.__session.cookies}",
@@ -352,6 +355,7 @@ class API:
             method,
             f"{self.WEBSITE_URL}{url}",
             data=data,
+            headers=headers,
             timeout=REQUEST_TIMEOUT_S,
         )
         Addon.CONFIG.set_cookie_jar(requests.utils.dict_from_cookiejar(self.__session.cookies))
@@ -375,9 +379,13 @@ class API:
         Addon.CONFIG.set_cookie_jar({})
         self.__session.cookies.clear()
         self.__token = None
+        self.__clear_watchlist_cache()
 
     def __ensure_has_my_list(self) -> None:
         if self.__my_list is not None:
+            return
+
+        if self.__load_watchlist_cache():
             return
 
         url = f"/customers/{self.__user_id}/watchlist"
@@ -392,6 +400,24 @@ class API:
         )
         final = self.__parse_media(res, from_tv=True, fast=True, is_my_list=True)
         self.__my_list = {i.entity_id for i in final}
+        self.__save_watchlist_cache()
+
+    def __load_watchlist_cache(self) -> bool:
+        cached = Addon.CONFIG.get_watchlist()
+        if cached is None:
+            return False
+        if datetime.datetime.now(tz=datetime.UTC) > cached.when + datetime.timedelta(minutes=5):
+            return False
+        self.__my_list = set(cached.ids)
+        return True
+
+    def __save_watchlist_cache(self) -> None:
+        assert self.__my_list is not None  # noqa: S101
+        Addon.CONFIG.set_watchlist(Watchlist(ids=list(self.__my_list), when=datetime.datetime.now(tz=datetime.UTC)))
+
+    def __clear_watchlist_cache(self) -> None:
+        self.__my_list = None
+        Addon.CONFIG.set_watchlist(None)
 
     def get_new_releases(self, *, page: int = 1) -> PaginatedMedia:
         self.__ensure_has_my_list()
@@ -445,6 +471,8 @@ class API:
         return res
 
     def get_my_list(self, *, page: int = 1) -> PaginatedMedia:
+        if page == 1:
+            self.__clear_watchlist_cache()
         url = f"/customers/{self.__user_id}/watchlist"
         res = self.__api_request(
             url,
@@ -572,7 +600,21 @@ class API:
             params=params,
             use_tv=True,
         )
-        return res is not None
+        success = res is not None
+        if success:
+            self.__patch_watchlist_cache(uid, added=method == "PUT")
+        return success
+
+    def __patch_watchlist_cache(self, uid: int, *, added: bool) -> None:
+        if self.__my_list is None and not self.__load_watchlist_cache():
+            return
+        assert self.__my_list is not None  # noqa: S101
+
+        if added:
+            self.__my_list.add(uid)
+        else:
+            self.__my_list.discard(uid)
+        self.__save_watchlist_cache()
 
     def __api_request(
         self,
@@ -589,7 +631,7 @@ class API:
             f"making api request to {url} ({next_url}) with params={params} and token={self.__token}",
             level=LOGDEBUG,
         )
-        res = requests.request(
+        res = self.__session.request(
             method,
             next_url,
             params=params,
@@ -632,7 +674,7 @@ class API:
         )
         items = []
         while True:
-            res = requests.get(
+            res = self.__session.get(
                 next_url,
                 params=params,
                 headers={
@@ -935,7 +977,6 @@ class API:
         )
 
     def __assets_from_item(self, item: dict, *, embedded: bool = False) -> Assets:
-        assets = None
         if embedded:
             adds = item["additional_images"]
             assets = Assets(
@@ -968,9 +1009,8 @@ class API:
         for i in page.items:
             if not isinstance(i, Video):
                 continue
-            if vid is None or vid.duration_s > i.duration_s:
+            if vid is None or vid.duration_s < i.duration_s:
                 vid = i
-                break
         # FIXME: are some video unavailable then?
         if vid is None:
             msg = f"invalid type for collection (movie) {item['id']}: {page.items}"
@@ -1064,9 +1104,7 @@ class API:
                 msg = "could not find id in collection"
                 raise ValueError(msg)
             iid = int(link_info.group(1))
-        name = None
         name = item["title"] if extended else item["name"]
-        assets = None
         assets = self.__assets_from_item(item, embedded=embedded) if extended else item["thumbnail"]["source"]
         return Collection(
             entity_id=iid,

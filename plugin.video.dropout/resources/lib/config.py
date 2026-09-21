@@ -27,11 +27,18 @@ class Credentials:
     when: datetime.datetime
 
 
+@dataclass
+class Watchlist:
+    ids: list[int]
+    when: datetime.datetime
+
+
 class Config:
     _COOKIEJAR_FILE = "cookiejar.json"
     _CREDENTIALS_FILE = "credentials.json"
     _PLAYSTATE_FILE = "playstate.json"
     _SEARCHES_FILE = "searches.json"
+    _WATCHLIST_FILE = "watchlist.json"
 
     _MAX_SEARCHES = 15
 
@@ -134,6 +141,27 @@ class Config:
             "when": credentials.when.isoformat(),
         }
         self.__write_json_file(self._CREDENTIALS_FILE, credentials_data)
+
+    def get_watchlist(self) -> Watchlist | None:
+        watchlist = self.__read_json_file(self._WATCHLIST_FILE, dfault={})
+        if not watchlist:
+            return None
+        return Watchlist(
+            ids=watchlist["ids"],
+            when=datetime.datetime.fromisoformat(watchlist["when"]),
+        )
+
+    def set_watchlist(self, watchlist: Watchlist | None) -> None:
+        if watchlist is None:
+            path = self.__get_path(self._WATCHLIST_FILE)
+            if path.exists():
+                path.unlink()
+            return
+        watchlist_data = {
+            "ids": watchlist.ids,
+            "when": watchlist.when.isoformat(),
+        }
+        self.__write_json_file(self._WATCHLIST_FILE, watchlist_data)
 
     def __get_path(self, file: str) -> Path:
         return self.__path / file
