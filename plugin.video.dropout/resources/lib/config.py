@@ -58,7 +58,7 @@ class Config:
                 completed=v["completed"],
                 duration_s=v["duration_s"],
                 timecode=v["timecode"],
-                last_seen=datetime.datetime.fromisoformat(v["last_seen"]),
+                last_seen=self.__parse_last_seen(v["last_seen"]),
                 from_us=True,
             )
             for k, v in playstates.items()
@@ -73,7 +73,7 @@ class Config:
             completed=data["completed"],
             duration_s=data["duration_s"],
             timecode=data["timecode"],
-            last_seen=datetime.datetime.fromisoformat(data["last_seen"]),
+            last_seen=self.__parse_last_seen(data["last_seen"]),
             from_us=True,
         )
 
@@ -162,6 +162,14 @@ class Config:
             "when": watchlist.when.isoformat(),
         }
         self.__write_json_file(self._WATCHLIST_FILE, watchlist_data)
+
+    @staticmethod
+    def __parse_last_seen(last_seen: str) -> datetime.datetime:
+        parsed = datetime.datetime.fromisoformat(last_seen)
+        if parsed.tzinfo is None:
+            # legacy entries were stored without a timezone, assume UTC (as newer ones are)
+            parsed = parsed.replace(tzinfo=datetime.UTC)
+        return parsed
 
     def __get_path(self, file: str) -> Path:
         return self.__path / file

@@ -463,7 +463,7 @@ class API:
                 key=lambda i: (
                     i.play_state.last_seen
                     if isinstance(i, ReleasedVideo) and i.play_state is not None
-                    else datetime.datetime.min
+                    else datetime.datetime.min.replace(tzinfo=datetime.UTC)
                 ),
                 reverse=True,
             )
