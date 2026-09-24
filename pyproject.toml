@@ -8,7 +8,7 @@ readme = "README.md"
 requires-python = ">=3.11.9,<3.12"
 
 [dependency-groups]
-dev = ["ruff==0.16.6", "ty==0.0.80"]
+dev = ["ruff==0.16.8", "ty==0.0.81"]
 
 [tool.ruff]
 target-version = "py311"
