@@ -1,3 +1,3 @@
-from resources.lib.player import start_monitor
+from resources.lib.player import MonitorPlayer
 
-start_monitor()
+MonitorPlayer.start()

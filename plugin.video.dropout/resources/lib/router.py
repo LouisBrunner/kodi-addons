@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 from urllib.parse import parse_qsl, urlencode
 
@@ -7,11 +8,16 @@ from .api import API
 from .utils import log_message
 
 
+@dataclass
+class Context:
+    handle: int
+    api: API
+
+
 class Router:
     def __init__(self, *, default_action: str) -> None:
         self.__routes: dict[str, Callable] = {}
         self.__default_action = default_action
-        self.__settings = Addon.settings()
         self.__api = API(credentials=Addon.credentials())
 
     def route(self, fn: Callable) -> Callable:
@@ -22,10 +28,10 @@ class Router:
         self.__routes[name] = fn
         return fn
 
-    def dispatch(self, path: str) -> None:
+    def dispatch(self, handle: int, path: str) -> None:
         params = dict(parse_qsl(path))
 
-        all_params = {**params, "api": self.__api, "sttngs": self.__settings}
+        all_params = {**params, "ctx": Context(api=self.__api, handle=handle)}
         all_params.pop("action", None)
 
         name = params.get("action", self.__default_action)
@@ -40,7 +46,7 @@ class Router:
         if res is not None:
             res.render()
 
-    def url_for(self, fn_or_action: Callable | str, **kwargs: Any) -> str:
+    def url_for(self, fn_or_action: Callable | str, **kwargs: Any) -> str:  # noqa: ANN401
         action = fn_or_action if isinstance(fn_or_action, str) else fn_or_action.__name__  # ty:ignore[unresolved-attribute]
         if action not in self.__routes:
             msg = f"Unsupported action {action}"

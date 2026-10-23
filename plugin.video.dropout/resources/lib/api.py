@@ -4,20 +4,22 @@ import html
 import json
 import re
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 from urllib.parse import urlencode
 
 import requests
 from bs4 import BeautifulSoup
 
-from .addon import Addon
-from .config import Credentials, PlayState, Watchlist
-from .utils import LOGDEBUG, LOGERROR, LOGNONE, LOGWARNING, log_message
+from .addon import Addon, KodiArt
+from .config import Credentials, PlayState, Profile, Watchlist
+from .utils import LOGDEBUG, LOGERROR, LOGINFO, LOGNONE, LOGWARNING, log_message
 
 REQUEST_TIMEOUT_S = (10, 30)
 
 TOKEN_FINDER = r'(?s)window\.VHX\.config\s*=\s*{.*token:\s*"([^"]*)",'  # noqa: S105
-USER_FINDER = r'"user_id":(\d+)'
+USER_FINDER = r'"user_id":\s*(\d+)'
+PROFILE_FINDER = r"profile_index:\s*(\d+)"
+SUBSCRIPTION_FINDER = r'user_has_subscription:\s*"true"'
 EMBED_FINDER = r'(?s)window\.VHX\.config\s*=\s*{.*embed_url:\s*"([^"]*)",'
 CONFIG_FINDER = r"(?s)window\.OTTData\s*=\s*({.*})\s*</script>"
 EMBED_ID_FINDER = r"https://embed\.vhx\.tv/videos/(\d+)\?"
@@ -177,133 +179,183 @@ class API:
     API_PREFIX = f"/v2/sites/{_VHX_SITE_ID}"
 
     DEFAULT_PER_PAGE = 25
+    _MAX_CREDENTIALS_AGE = datetime.timedelta(minutes=5)
 
-    def __init__(self, *, credentials: tuple[str, str]) -> None:
-        self.__credentials = credentials
+    Stage = Literal["login", "nosub", "profile-select", "ready"]
+    UserCredentials = tuple[str, str]
+    APICredentials = tuple[str, int]
 
+    stage: Stage = "login"
+
+    def __init__(self, *, credentials: UserCredentials) -> None:
         self.__session = requests.session()
-        cookies = requests.utils.cookiejar_from_dict(Addon.CONFIG.get_cookie_jar())
-        self.__session.cookies.update(cookies)
+        cookies = Addon.CONFIG.get_cookie_jar()
+        if cookies is not None:
+            self.__session.cookies.update(cookies)
 
+        self.just_logged_in = False
         self.__my_list: set[int] | None = None
         self.__token = None
         self.__user_id = None
+        self.__new_hash = None
+        self.__profiles: list[Profile] = []
+        self.stage = "login"
+        self.stage = self.__login_start(credentials)
 
-        self.logged_in = False
-        self.has_subscription = False
+        if self.stage != "ready":
+            log_message(f"login stopped at {self.stage}", level=LOGERROR)
 
-        creds = Addon.CONFIG.get_credentials()
+    def __calculate_hash(self, creds: UserCredentials) -> str:
+        username, password = creds
+        return hashlib.sha256(f"{username}{password}".encode()).hexdigest()
 
-        self.__ensure_logged_in(creds)
+    def __login_start(self, creds: UserCredentials) -> "API.Stage":
+        new_hash = self.__calculate_hash(creds)
 
-        if creds is None and self.logged_in and self.has_subscription:
+        reselect = True
+        if res := self.__cached_login(new_hash):
+            token, user_id, profiles = res
+            reselect = False
+        elif res := self.__resume_session() or self.__do_login(creds):
+            token, user_id, sub = res
+            if not sub:
+                return "nosub"
+            profiles = self.__fetch_profiles(user_id, token)
+            if profiles is None:
+                return "login"
+        else:
+            return "login"
+
+        previous = Addon.CONFIG.get_credentials()
+        profile, pin = None, None
+        if previous is not None and previous.user_id != user_id:
+            log_message("user changed, wiping data", level=LOGWARNING)
+            Addon.CONFIG.clear_data(cookies=False)
+        elif previous is not None:
+            profile = previous.selected_profile
+            pin = previous.pins.get(profile)
+
+        profile, pin, scoped = self.__pick_profile(profile, pin, profiles, reselect=reselect)
+
+        if profile is None:
+            self.just_logged_in = True
+            self.__token = token
+            self.__user_id = user_id
+            self.__new_hash = new_hash
+            self.__profiles = profiles
+            return "profile-select"
+
+        self.__login_resume(profile=(profile, pin), creds=(scoped or token, user_id, new_hash, profiles))
+        return "ready"
+
+    def __pick_profile(
+        self, saved: str | None, pin: str | None, profiles: list[Profile], *, reselect: bool
+    ) -> tuple[str | None, str | None, str | None]:
+        scoped = None
+        if saved is not None and reselect:
+            scoped = self.__select_profile(saved, pin)
+            if scoped is None:
+                saved, pin = None, None
+
+        if saved is None and len(profiles) == 1 and not profiles[0].pin_locked:
+            scoped = self.__select_profile(profiles[0].index)
+            if scoped is not None:
+                saved = profiles[0].index
+
+        return saved, pin, scoped
+
+    def __login_resume(
+        self, *, profile: tuple[str, str | None], creds: tuple[str, int, str, list[Profile]] | None = None
+    ) -> None:
+        if creds is not None:
+            token, user_id, new_hash, profiles = creds
+            self.__token = token
+            self.__user_id = user_id
+            self.__new_hash = new_hash
+            self.__profiles = profiles
+        else:
             assert self.__token is not None  # noqa: S101
             assert self.__user_id is not None  # noqa: S101
-            log_message(f"caching credentials {self.__token}/{self.__user_id}", level=LOGDEBUG)
-            Addon.CONFIG.set_credentials(
-                Credentials(
-                    hash=self.__calculate_hash(),
-                    token=self.__token,
-                    user_id=self.__user_id,
-                    when=datetime.datetime.now(tz=datetime.UTC),
-                )
+            assert self.__new_hash is not None  # noqa: S101
+            assert self.__profiles is not None  # noqa: S101
+
+        selected_profile, pin = profile
+        previous = Addon.CONFIG.get_credentials()
+        pins = previous.pins if previous else {}
+        if pin is not None:
+            pins[selected_profile] = pin
+
+        log_message(f"caching credentials {self.__token}/{self.__user_id}", level=LOGDEBUG)
+        Addon.CONFIG.set_credentials(
+            Credentials(
+                hash=self.__new_hash,
+                token=self.__token,
+                user_id=self.__user_id,
+                when=datetime.datetime.now(tz=datetime.UTC),
+                profiles=self.__profiles,
+                selected_profile=selected_profile,
+                pins=pins,
             )
+        )
 
-    def __calculate_hash(self) -> str:
-        username, password = self.__credentials
-        return hashlib.md5(f"{username}{password}".encode()).hexdigest()  # noqa: S324
+    def __cached_login(self, new_hash: str) -> tuple[*APICredentials, list[Profile]] | None:
+        current = Addon.CONFIG.get_credentials()
+        if current is None:
+            return None
 
-    def __ensure_logged_in(self, creds: Credentials | None) -> bool:
-        if creds is not None:
-            hashc = self.__calculate_hash()
-            now = datetime.datetime.now(tz=datetime.UTC)
-            if hashc == creds.hash and now - creds.when < datetime.timedelta(minutes=5):
-                self.__token = creds.token
-                self.__user_id = creds.user_id
-                self.logged_in = True
-                self.has_subscription = True
-                log_message(
-                    f"using cached credentials {self.__token}/{self.__user_id}",
-                    level=LOGDEBUG,
-                )
-                return True
+        now = datetime.datetime.now(tz=datetime.UTC)
+        age = now - current.when
+
+        if new_hash == current.hash and age < self._MAX_CREDENTIALS_AGE and len(current.profiles) > 0:
             log_message(
-                f"not using cash {hashc} != {creds.hash} or expired {now - creds.when}",
+                f"using cached credentials {self.__token}/{self.__user_id}",
                 level=LOGDEBUG,
             )
-            Addon.CONFIG.set_credentials(None)
-
-        if self.__update_from_website():
-            return True
-
-        return self.__do_login()
-
-    def __do_login(self) -> bool:
-        username, password = self.__credentials
-        if username == "" or password == "":
-            log_message("no credentials set, cannot login", level=LOGWARNING)
-            return False
-
-        authenticity_token = self.__get_authenticity_token()
+            return current.token, current.user_id, current.profiles
 
         log_message(
-            f"trying to login with auth_token {authenticity_token}",
-            level=LOGWARNING,
+            f"not using cached {new_hash} != {current.hash}, expired {age} or {len(current.profiles)} profiles",
+            level=LOGDEBUG,
         )
+        return None
+
+    def __do_login(self, creds: UserCredentials) -> tuple[*APICredentials, bool] | None:
+        username, password = creds
+        if username == "" or password == "":
+            log_message("no credentials set, cannot login", level=LOGWARNING)
+            return None
+
+        log_message("trying to login", level=LOGINFO)
         res = self.__website_request(
             "/login",
             method="POST",
             data={
                 "email": username,
                 "password": password,
-                "authenticity_token": authenticity_token,
+                "authenticity_token": self.__get_authenticity_token(),
                 "utf8": True,
             },
         )
+        account = self.__read_account(res)
+        if account is None:
+            log_message(f"login failed {res.status_code} with {res.text[:100]}", level=LOGWARNING)
+        return account
+
+    def __resume_session(self) -> tuple[*APICredentials, bool] | None:
+        return self.__read_account(self.__website_request("/"))
+
+    @classmethod
+    def __read_account(cls, res: requests.Response) -> tuple[*APICredentials, bool] | None:
         if not res.ok:
-            log_message(
-                f"login failed with {res.text}",
-                level=LOGWARNING,
-            )
-            return False
-
-        return self.__update_from_website()
-
-    def __update_from_website(self) -> bool:
-        self.__update_status()
-
-        if self.logged_in:
-            return self.__update_token()
-
-        return False
-
-    def __update_token(self) -> bool:
-        res = self.__website_request("/")
+            return None
         token_info = re.search(TOKEN_FINDER, res.text)
         user_info = re.search(USER_FINDER, res.text)
-        self.__token = token_info.group(1) if token_info is not None else None
-        self.__user_id = int(user_info.group(1)) if user_info is not None else None
-        log_message(
-            f"updating token with {token_info}/{user_info} => token={self.__token}, user_id={self.__user_id}",
-            level=LOGDEBUG,
-        )
-        return token_info is not None and user_info is not None
-
-    def __update_status(self) -> bool:
-        res = self.__website_request("/customer_settings/subscription_plans")
-        sub_plan = res.json()
-        self.logged_in = sub_plan is not None
-        self.has_subscription = sub_plan is not None and not sub_plan.get("current_plan", {}).get("has_expired", True)
-        log_message(
-            (
-                f"updating status with {res}/{sub_plan} => logged_in={self.logged_in}, "
-                f"has_subscription={self.has_subscription}"
-            ),
-            level=LOGDEBUG,
-        )
-        if sub_plan is None:
-            self.__clear_auth_data()
-        return sub_plan is not None
+        token = token_info.group(1) if token_info is not None else None
+        user_id = int(user_info.group(1)) if user_info is not None else None
+        sub = re.search(SUBSCRIPTION_FINDER, res.text) is not None
+        if token is None or user_id is None:
+            return None
+        return token, user_id, sub
 
     def __get_authenticity_token(self, *, meta: bool = False) -> str:
         if meta:
@@ -319,10 +371,7 @@ class API:
                 raise ValueError(msg)
             return str(token)
 
-        res = self.__website_request(
-            "/login",
-            headers={"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"},
-        )
+        res = self.__website_request("/login")
         soup = BeautifulSoup(res.text, "html.parser")
 
         form = soup.find(id="login-form-password")
@@ -346,6 +395,7 @@ class API:
         method: str = "GET",
         data: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
+        json: bool = False,
     ) -> requests.Response:
         log_message(
             f"making website request to {url} with data={data} and cookies={self.__session.cookies}",
@@ -354,16 +404,71 @@ class API:
         rep = self.__session.request(
             method,
             f"{self.WEBSITE_URL}{url}",
-            data=data,
-            headers=headers,
+            data=data if not json else None,
+            json=data if json else None,
+            headers={"Accept": "text/html", **(headers or {})},
             timeout=REQUEST_TIMEOUT_S,
         )
-        Addon.CONFIG.set_cookie_jar(requests.utils.dict_from_cookiejar(self.__session.cookies))
+        Addon.CONFIG.set_cookie_jar(self.__session.cookies)
         log_message(
             f"website request to {url} returned {rep.status_code} with {rep.text}",
             level=LOGNONE,
         )
         return rep
+
+    def __fetch_profiles(self, user_id: int, token: str) -> list[Profile] | None:
+        res = self.__api_request(f"/users/{user_id}/profiles", use_tv=False, token=token)
+        if res is None:
+            return None
+        profiles = [
+            Profile(
+                index=str(p["index"]),
+                name=p["name"],
+                pin_locked=p["pin_locked"],
+                image=p["profile_image_url"],
+            )
+            for p in res["profiles"]
+        ]
+        if len(profiles) == 0:
+            log_message(f"no profiles found for user {user_id}", level=LOGWARNING)
+            return None
+        return profiles
+
+    def get_profiles(self) -> list[Profile]:
+        return self.__profiles
+
+    def __select_profile(self, index: str, pin: str | None = None) -> str | None:
+        res = self.__website_request(
+            "/profile/login",
+            method="POST",
+            data={
+                "profile_index": int(index),
+                **({"pin": pin} if pin is not None else {}),
+            },
+            headers={"X-CSRF-Token": self.__get_authenticity_token(meta=True)},
+            json=True,
+        )
+        if not res.ok:
+            log_message(f"profile selection failed with {res.status_code}", level=LOGWARNING)
+            return None
+        return str(res.json()["access_token"])
+
+    def select_profile(self, index: str, pin: str | None = None) -> bool:
+        if (token := self.__select_profile(index, pin)) is None:
+            return False
+
+        self.__token = token
+        if self.stage == "profile-select":
+            self.__login_resume(profile=(index, pin))
+            self.stage = "ready"
+        else:
+            Addon.CONFIG.set_profile(index, token=token)
+            if pin:
+                Addon.CONFIG.set_pin(index, pin)
+
+        self.__clear_watchlist_cache()
+
+        return True
 
     def logout(self) -> None:
         self.__website_request(
@@ -371,15 +476,20 @@ class API:
             method="POST",
             data={"authenticity_token": self.__get_authenticity_token(meta=True)},
         )
-        self.logged_in = False
-        self.has_subscription = False
-        self.__clear_auth_data()
+        self.__reset(cookies=True)
+        self.stage = "login"
 
-    def __clear_auth_data(self) -> None:
-        Addon.CONFIG.set_cookie_jar({})
-        self.__session.cookies.clear()
+    def __reset(self, *, cookies: bool) -> None:
         self.__token = None
+        self.__user_id = None
+        self.__new_hash = None
+        self.__profiles = []
         self.__clear_watchlist_cache()
+
+        Addon.CONFIG.clear_data(cookies=cookies)
+        if cookies:
+            self.__session.cookies.clear()
+            Addon.CONFIG.set_cookie_jar(None)
 
     def __ensure_has_my_list(self) -> None:
         if self.__my_list is not None:
@@ -398,7 +508,7 @@ class API:
             },
             use_tv=True,
         )
-        final = self.__parse_media(res, from_tv=True, fast=True, is_my_list=True)
+        final = self.__parse_media(res, fast=True, is_my_list=True)
         self.__my_list = {i.entity_id for i in final}
         self.__save_watchlist_cache()
 
@@ -502,11 +612,12 @@ class API:
 
     def search(self, *, query: str, page: int) -> PaginatedMedia:
         self.__ensure_has_my_list()
+        types = ["video", "collection", "live_event", "product"]
         res = self.__api_request(
             "/search",
             params={
                 "q": query,
-                "type": ",".join(["video", "collection", "live_event", "product"]),  # noqa: FLY002
+                "type": ",".join(types),
                 "page": page,
                 "per_page": self.DEFAULT_PER_PAGE,
             },
@@ -608,7 +719,8 @@ class API:
     def __patch_watchlist_cache(self, uid: int, *, added: bool) -> None:
         if self.__my_list is None and not self.__load_watchlist_cache():
             return
-        assert self.__my_list is not None  # noqa: S101
+        if self.__my_list is None:
+            self.__my_list = set()
 
         if added:
             self.__my_list.add(uid)
@@ -620,6 +732,7 @@ class API:
         self,
         url: str,
         *,
+        token: str | None = None,
         use_tv: bool,
         method: str = "GET",
         params: dict[str, Any] | None = None,
@@ -627,8 +740,9 @@ class API:
         base = self.API_URL_TV if use_tv else self.API_URL_COM
         extra_parts = [self.API_PREFIX] if not use_tv else []
         next_url = "".join([base, *extra_parts, url])
+        token = token if token is not None else self.__token
         log_message(
-            f"making api request to {url} ({next_url}) with params={params} and token={self.__token}",
+            f"making api request to {url} ({next_url}) with params={params} and token={token}",
             level=LOGDEBUG,
         )
         res = self.__session.request(
@@ -636,7 +750,7 @@ class API:
             next_url,
             params=params,
             headers={
-                "Authorization": f"Bearer {self.__token}",
+                "Authorization": f"Bearer {token}",
             },
             timeout=REQUEST_TIMEOUT_S,
         )
@@ -736,7 +850,7 @@ class API:
         if pagination["count"] >= pagination["page"] * pagination["per_page"]:
             next_page = pagination["page"] + 1
         return PaginatedMedia(
-            items=self.__parse_media(res[items], from_tv=False, is_my_list=is_my_list),
+            items=self.__parse_media(res[items], is_my_list=is_my_list),
             page=pagination["page"],
             next_page=next_page,
         )
@@ -748,12 +862,12 @@ class API:
         if res.get("_links", {}).get("next", {}).get("href") is not None:
             next_page = current_page + 1
         return PaginatedMedia(
-            items=self.__parse_media(res["_embedded"]["items"], from_tv=True, is_my_list=is_my_list),
+            items=self.__parse_media(res["_embedded"]["items"], is_my_list=is_my_list),
             page=current_page,
             next_page=next_page,
         )
 
-    def __parse_medium(self, item: dict, *, from_tv: bool, is_my_list: bool = False) -> tuple[Media, bool]:  # noqa: ARG002
+    def __parse_medium(self, item: dict, *, is_my_list: bool = False) -> tuple[Media, bool]:
         is_embedded = True
         if "entity" in item:
             item = item["entity"]
@@ -811,7 +925,6 @@ class API:
         self,
         items: list[dict],
         *,
-        from_tv: bool,
         fast: bool = False,
         is_my_list: bool = False,
     ) -> list[Media]:
@@ -819,11 +932,7 @@ class API:
         videos = []
         for item in items:
             try:
-                media, need_play_state = self.__parse_medium(
-                    item,
-                    from_tv=from_tv,
-                    is_my_list=is_my_list,
-                )
+                media, need_play_state = self.__parse_medium(item, is_my_list=is_my_list)
                 if need_play_state:
                     videos.append(len(out))
                 out.append(media)
@@ -900,8 +1009,19 @@ class API:
             return []
         return data["entries"]
 
+    @classmethod
+    def __datetime_format(cls, *, embedded: bool) -> str:
+        return "%Y-%m-%dT%H:%M:%S.%fZ" if not embedded else "%Y-%m-%dT%H:%M:%SZ"
+
+    @classmethod
+    def __parse_datetime(cls, dt: str, *, embedded: bool) -> datetime.datetime:
+        return datetime.datetime.strptime(dt, cls.__datetime_format(embedded=embedded)).astimezone(tz=datetime.UTC)
+
+    @classmethod
+    def __parse_date(cls, dt: str) -> datetime.date:
+        return datetime.datetime.strptime(dt, "%Y-%m-%d").astimezone(tz=datetime.UTC).date()
+
     def __parse_video(self, item: dict, *, embedded: bool = False) -> Video:
-        dateformat = "%Y-%m-%dT%H:%M:%S.%fZ" if not embedded else "%Y-%m-%dT%H:%M:%SZ"
         if "metadata" not in item:
             return UnreleasedVideo(
                 entity_id=item["id"],
@@ -911,8 +1031,8 @@ class API:
                 description=item["description"],
                 duration_s=item["duration"]["seconds"],
                 thumbnail=item["thumbnail"]["source"],
-                created_at=datetime.datetime.strptime(item["created_at"], dateformat),
-                updated_at=datetime.datetime.strptime(item["updated_at"], dateformat),
+                created_at=self.__parse_datetime(item["created_at"], embedded=embedded),
+                updated_at=self.__parse_datetime(item["updated_at"], embedded=embedded),
             )
         metadata = item["metadata"]
         series = None
@@ -948,7 +1068,7 @@ class API:
         if rdates is not None:
             release_dates = [
                 VideoReleaseDate(
-                    date=datetime.datetime.strptime(rdate["date"], "%Y-%m-%d").date(),
+                    date=self.__parse_date(rdate["date"]),
                     location=rdate["location"],
                 )
                 for rdate in rdates
@@ -971,8 +1091,8 @@ class API:
             thumbnail=thumbnail,
             tags=tags if tags is not None else [],
             release_dates=release_dates,
-            created_at=datetime.datetime.strptime(item["created_at"], dateformat),
-            updated_at=datetime.datetime.strptime(item["updated_at"], dateformat),
+            created_at=self.__parse_datetime(item["created_at"], embedded=embedded),
+            updated_at=self.__parse_datetime(item["updated_at"], embedded=embedded),
             play_state=Addon.CONFIG.get_playstate(item["id"]),
         )
 
@@ -1048,7 +1168,6 @@ class API:
         )
 
     def __parse_season(self, item: dict, *, embedded: bool = False) -> Season:
-        dateformat = "%Y-%m-%dT%H:%M:%S.%fZ" if not embedded else "%Y-%m-%dT%H:%M:%SZ"
         return Season(
             entity_id=item["id"],
             title=item["title"],
@@ -1057,12 +1176,11 @@ class API:
             episodes_count=item["episodes_count"],
             trailer_url=item.get("trailer_video_id"),
             thumbnail=item["thumbnails"]["16_9"]["source"],
-            created_at=datetime.datetime.strptime(item["created_at"], dateformat),
-            updated_at=datetime.datetime.strptime(item["updated_at"], dateformat),
+            created_at=self.__parse_datetime(item["created_at"], embedded=embedded),
+            updated_at=self.__parse_datetime(item["updated_at"], embedded=embedded),
         )
 
     def __parse_series(self, item: dict, *, embedded: bool = False) -> Series:
-        dateformat = "%Y-%m-%dT%H:%M:%S.%fZ" if not embedded else "%Y-%m-%dT%H:%M:%SZ"
         collection_page = None
         if embedded:
             collection_page = item["_links"]["collection_page"]
@@ -1078,8 +1196,8 @@ class API:
             seasons=item["seasons_count"],
             trailer_url=trailer_url,
             assets=self.__assets_from_item(item, embedded=embedded),
-            created_at=datetime.datetime.strptime(item["created_at"], dateformat),
-            updated_at=datetime.datetime.strptime(item["updated_at"], dateformat),
+            created_at=self.__parse_datetime(item["created_at"], embedded=embedded),
+            updated_at=self.__parse_datetime(item["updated_at"], embedded=embedded),
         )
 
     _RESERVED_CATEGORIES: ClassVar = [
@@ -1092,7 +1210,6 @@ class API:
     ]
 
     def __parse_collection(self, item: dict, *, embedded: bool = False, extended: bool = False) -> Collection:
-        dateformat = "%Y-%m-%dT%H:%M:%S.%fZ" if not embedded else "%Y-%m-%dT%H:%M:%SZ"
         slug = item["slug"]
         if slug in self._RESERVED_CATEGORIES:
             msg = "internal category, skipping"
@@ -1114,8 +1231,8 @@ class API:
             thumbnail=assets,
             short_description=item["short_description"] if extended else None,
             description=item["description"] if extended else None,
-            created_at=datetime.datetime.strptime(item["created_at"], dateformat) if extended else None,
-            updated_at=datetime.datetime.strptime(item["updated_at"], dateformat) if extended else None,
+            created_at=self.__parse_datetime(item["created_at"], embedded=embedded) if extended else None,
+            updated_at=self.__parse_datetime(item["updated_at"], embedded=embedded) if extended else None,
         )
 
     def __embed_for_slug(self, slug: str) -> str:
@@ -1215,21 +1332,20 @@ class API:
             def_cdn = next(iter(cdns.keys()))
         return cdns[def_cdn]
 
+    _ART_DIMENSIONS: ClassVar[dict[KodiArt, tuple[int, int]]] = {
+        "poster": (1000, 1500),  # 2:3
+        "fanart": (1920, 1080),  # 16:9
+        "thumb": (1280, 720),  # 16:9
+        "banner": (1000, 185),  # 5.4:1
+        "landscape": (1280, 720),  # 16:9
+    }
 
-art_dimensions = {
-    "poster": (1000, 1500),  # 2:3
-    "fanart": (1920, 1080),  # 16:9
-    "thumb": (1280, 720),  # 16:9
-    "banner": (1000, 185),  # 5.4:1
-    "landscape": (1280, 720),  # 16:9
-}
-
-
-def thumbnail_formatter(src: str, *, art: str, blurred: bool = False) -> str:
-    args = {}
-    if blurred:
-        args["blur"] = 180
-    if art in art_dimensions:
-        args["w"], args["h"] = art_dimensions[art]
-        args["fit"] = "crop"
-    return f"{src}?{urlencode(args)}"
+    @classmethod
+    def thumbnail_formatter(cls, src: str, *, art: str, blurred: bool = False) -> str:
+        args = {}
+        if blurred:
+            args["blur"] = 180
+        if art in cls._ART_DIMENSIONS:
+            args["w"], args["h"] = cls._ART_DIMENSIONS[art]
+            args["fit"] = "crop"
+        return f"{src}?{urlencode(args)}"

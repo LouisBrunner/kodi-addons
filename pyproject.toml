@@ -5,7 +5,6 @@ name = "kodi-addons"
 version = "0"
 description = "Addons for Kodi (XBMC) "
 readme = "README.md"
-requires-python = ">=3.11.9,<3.12"
 
 [dependency-groups]
 dev = ["ruff==0.16.6", "ty==0.0.80"]
@@ -14,11 +13,13 @@ dev = ["ruff==0.16.6", "ty==0.0.80"]
 target-version = "py311"
 
 [tool.ruff.lint.per-file-ignores]
-"tools/*.py" = ["INP001", "T201"]
 "vendor/*.py" = ["ALL"]
 
 [tool.ty.src]
 exclude = ["vendor"]
+
+[tool.ty.environment]
+extra-paths = ["plugin.video.dropout"]
 
 [tool.uv.workspace]
 members = ["plugin.video.dropout"]

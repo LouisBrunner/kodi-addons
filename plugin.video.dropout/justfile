@@ -1,0 +1,11 @@
+mod parent "../justfile"
+
+target := file_name(justfile_directory())
+
+set default-list
+
+dev: (parent::dev target)
+
+deploy *args: (parent::deploy target args)
+
+test: (parent::test target)

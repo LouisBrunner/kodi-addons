@@ -1,13 +1,14 @@
-import sys
+from typing import Literal
 
 import xbmcaddon
 import xbmcvfs
 
 from .config import Config
-from .settings import Settings
 
 _ID = "plugin.video.dropout"
 _XBMC = xbmcaddon.Addon(_ID)
+
+KodiArt = Literal["icon", "poster", "fanart", "thumb", "banner", "landscape"]
 
 
 class Addon:
@@ -16,10 +17,6 @@ class Addon:
     PATH = _XBMC.getAddonInfo("path")
     CONFIG = Config(xbmcvfs.translatePath(f"special://profile/addon_data/{_ID}"))
     PLAYER_VIDEO_ID = f"{_ID}.video_id"
-
-    @classmethod
-    def handle(cls) -> int:
-        return int(sys.argv[1])
 
     @classmethod
     def debug(cls) -> bool:
@@ -48,7 +45,3 @@ class Addon:
         except RuntimeError:
             return False
         return addon is not None
-
-    @classmethod
-    def settings(cls) -> Settings:
-        return Settings()

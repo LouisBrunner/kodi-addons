@@ -4,36 +4,45 @@ from .patch import monkey_patch
 
 monkey_patch()
 
-import sys
 
 import xbmc
 
 from .addon import Addon
-from .api import API
+from .api import Profile
 from .language import _
-from .router import Router
-from .settings import Settings
-from .ui import Dialog, Folder, TextDialog, notify, play_video, refresh, render_page
+from .router import Context, Router
+from .ui import Dialog, Folder, ProfileDialog, TextDialog, notify, play_video, refresh, render_page
 from .utils import log_message
 
 router = Router(default_action="home")
 
 
-def dispatch() -> None:
-    path = sys.argv[2][1:]
+def dispatch(args: list[str]) -> None:
+    if len(args) < 3:  # noqa: PLR2004
+        msg = f"Invalid arguments: {args}"
+        raise ValueError(msg)
+
+    handle = int(args[1])
+    path = args[2][1:]
     log_message(f"entered with: {path}")
 
-    router.dispatch(path)
+    router.dispatch(handle, path)
 
 
 @router.route
-def home(*, sttngs: Settings, api: API) -> Folder:  # noqa: ARG001
-    folder = Folder(_.HOME_TITLE)
+def home(*, ctx: Context) -> Folder:
+    folder = Folder(_.HOME_TITLE, ctx=ctx)
 
-    if not api.logged_in:
+    if ctx.api.stage == "login":
         folder.add_folder(router=router, label=_.LOGIN, path=router.url_for(login))
-    elif not api.has_subscription:
+    elif ctx.api.stage == "nosub":
         folder.add_folder(router=router, label=_.LOGIN_WITH_SUBSCRIPTION, path=router.url_for(login))
+    elif ctx.api.stage == "profile-select":
+        if ctx.api.just_logged_in:
+            select_profile(ctx=ctx).render()
+            ctx.api.just_logged_in = False
+        folder.add_folder(router=router, label=_.SELECT_PROFILE, path=router.url_for(select_profile))
+        folder.add_folder(router=router, label=_.LOGOUT, path=router.url_for(logout))
     else:
         folder.add_folder(router=router, label=_.FEATURED, path=router.url_for(featured))
         folder.add_folder(
@@ -48,87 +57,102 @@ def home(*, sttngs: Settings, api: API) -> Folder:  # noqa: ARG001
         folder.add_folder(router=router, label=_.BROWSE, path=router.url_for(browse))
         folder.add_folder(router=router, label=_.SEARCH, path=router.url_for(search))
 
+        folder.add_folder(router=router, label=_.SELECT_PROFILE, path=router.url_for(select_profile))
         folder.add_folder(router=router, label=_.LOGOUT, path=router.url_for(logout))
 
     return folder
 
 
 @router.route
-def login(*, sttngs: Settings, api: API) -> Dialog:
+def login(*, ctx: Context) -> Dialog:
     return Dialog(
-        title=_.LOGIN_TITLE,
+        title=_.SUBSCRIPTION_REQUIRED,
         message=_.LOGIN_MESSAGE,
-        on_ok=lambda: settings(sttngs=sttngs, api=api),
+        on_ok=lambda: settings(ctx=ctx),
     )
 
 
 @router.route
-def featured(*, sttngs: Settings, api: API, page: str = "1") -> Folder:  # noqa: ARG001
-    return render_page(
-        router,
-        action="featured",
-        title=_.FEATURED,
-        page=api.get_featured(page=int(page)),
+def select_profile(*, ctx: Context) -> ProfileDialog:
+    player = xbmc.Player()
+    if player.isPlaying():
+        player.stop()
+
+    def _on_select(profile: Profile, pin: str | None) -> bool:
+        return ctx.api.select_profile(profile.index, pin)
+
+    def _on_done() -> None:
+        refresh()
+
+    return ProfileDialog(
+        profiles=ctx.api.get_profiles(),
+        current=Addon.CONFIG.get_profile(),
+        on_select=_on_select,
+        on_done=_on_done,
     )
 
 
 @router.route
-def continue_watching(*, sttngs: Settings, api: API, page: str = "1") -> Folder:  # noqa: ARG001
+def featured(*, ctx: Context, page: str = "1") -> Folder:
+    return render_page(router, ctx=ctx, action="featured", title=_.FEATURED, page=ctx.api.get_featured(page=int(page)))
+
+
+@router.route
+def continue_watching(*, ctx: Context, page: str = "1") -> Folder:
     return render_page(
         router,
+        ctx=ctx,
         action="continue_watching",
         title=_.CONTINUE_WATCHING,
         content="episodes",
-        page=api.get_continue_watching(page=int(page)),
+        page=ctx.api.get_continue_watching(page=int(page)),
     )
 
 
 @router.route
-def my_list(*, sttngs: Settings, api: API, page: str = "1") -> Folder:  # noqa: ARG001
-    return render_page(router, action="my_list", title=_.MY_LIST, page=api.get_my_list(page=int(page)))
+def my_list(*, ctx: Context, page: str = "1") -> Folder:
+    return render_page(router, ctx=ctx, action="my_list", title=_.MY_LIST, page=ctx.api.get_my_list(page=int(page)))
 
 
 @router.route
-def new_releases(*, sttngs: Settings, api: API, page: str = "1") -> Folder:  # noqa: ARG001
+def new_releases(*, ctx: Context, page: str = "1") -> Folder:
     return render_page(
         router,
+        ctx=ctx,
         action="new_releases",
         title=_.NEW_RELEASES,
-        page=api.get_new_releases(page=int(page)),
+        page=ctx.api.get_new_releases(page=int(page)),
         content="episodes",
     )
 
 
 @router.route
-def trending(*, sttngs: Settings, api: API, page: str = "1") -> Folder:  # noqa: ARG001
+def trending(*, ctx: Context, page: str = "1") -> Folder:
     return render_page(
         router,
+        ctx=ctx,
         action="trending",
         content="tvshows",
         title=_.TRENDING,
-        page=api.get_trending(page=int(page)),
+        page=ctx.api.get_trending(page=int(page)),
     )
 
 
 @router.route
-def series(*, sttngs: Settings, api: API, page: str = "1") -> Folder:  # noqa: ARG001
+def series(*, ctx: Context, page: str = "1") -> Folder:
     return render_page(
-        router,
-        action="series",
-        content="tvshows",
-        title=_.SERIES,
-        page=api.get_all_series(page=int(page)),
+        router, ctx=ctx, action="series", content="tvshows", title=_.SERIES, page=ctx.api.get_all_series(page=int(page))
     )
 
 
 @router.route
-def browse(*, sttngs: Settings, api: API, page: str = "1") -> Folder:  # noqa: ARG001
-    return render_page(router, action="browse", title=_.BROWSE, page=api.get_browse(page=int(page)))
+def browse(*, ctx: Context, page: str = "1") -> Folder:
+    return render_page(router, ctx=ctx, action="browse", title=_.BROWSE, page=ctx.api.get_browse(page=int(page)))
 
 
 @router.route
-def search(*, sttngs: Settings, api: API) -> Folder:  # noqa: ARG001
-    folder = Folder(_.SEARCH)
+def search(*, ctx: Context) -> Folder:
+    folder = Folder(_.SEARCH, ctx=ctx)
     folder.add_folder(
         router=router,
         label=_.NEW_SEARCH,
@@ -154,122 +178,125 @@ def search(*, sttngs: Settings, api: API) -> Folder:  # noqa: ARG001
 
 
 @router.route
-def remove_search(*, sttngs: Settings, api: API, search: str) -> None:  # noqa: ARG001
+def remove_search(*, ctx: Context, search: str) -> None:  # noqa: ARG001
     Addon.CONFIG.remove_search(search)
     return refresh()
 
 
 @router.route
-def new_search(*, sttngs: Settings, api: API) -> TextDialog:  # noqa: ARG001
-    def on_ok(search: str) -> None:
+def new_search(*, ctx: Context) -> TextDialog:  # noqa: ARG001
+    def _on_ok(search: str) -> None:
         Addon.CONFIG.add_search(search)
         xbmc.executebuiltin(f"RunPlugin({router.url_for(search_results, search=search)})")
 
     return TextDialog(
         title=_.SEARCH,
-        on_ok=on_ok,
+        on_ok=_on_ok,
     )
 
 
 @router.route
-def search_results(*, sttngs: Settings, api: API, search: str, page: str = "1") -> Folder:  # noqa: ARG001
+def search_results(*, ctx: Context, search: str, page: str = "1") -> Folder:
     return render_page(
         router,
+        ctx=ctx,
         action="search_results",
         title=_(_.SEARCH_RESULTS_FOR).format(query=search),
-        page=api.search(query=search, page=int(page)),
+        page=ctx.api.search(query=search, page=int(page)),
         extra={"search": search},
     )
 
 
 @router.route
-def logout(*, sttngs: Settings, api: API) -> Dialog:  # noqa: ARG001
-    def on_ok() -> None:
-        api.logout()
+def logout(*, ctx: Context) -> Dialog:
+    def _on_ok() -> None:
+        ctx.api.logout()
         Addon.reset_credentials()
         refresh()
 
     return Dialog(
-        title=_.LOGOUT_TITLE,
+        title=_.LOGOUT,
         message=_.LOGOUT_MESSAGE,
-        on_ok=on_ok,
+        on_ok=_on_ok,
     )
 
 
 @router.route
-def settings(*, sttngs: Settings, api: API) -> None:  # noqa: ARG001
+def settings(*, ctx: Context) -> None:  # noqa: ARG001
     return Addon.XBMC.openSettings()
 
 
 @router.route
 def show_collection(
     *,
-    sttngs: Settings,  # noqa: ARG001
-    api: API,
+    ctx: Context,
     collection_id: str,
     page: str = "1",
 ) -> Folder:
     cid = int(collection_id)
-    collection = api.get_collection(cid)
+    collection = ctx.api.get_collection(cid)
     return render_page(
         router,
+        ctx=ctx,
         action="show_collection",
         title=collection.name,
-        page=api.get_collection_items(collection=cid, page=int(page)),
+        page=ctx.api.get_collection_items(collection=cid, page=int(page)),
         extra={"collection_id": collection_id},
     )
 
 
 @router.route
-def show_series(*, sttngs: Settings, api: API, entity_id: str, page: str = "1") -> Folder:  # noqa: ARG001
+def show_series(*, ctx: Context, entity_id: str, page: str = "1") -> Folder:
     sid = int(entity_id)
-    series = api.get_series(sid)
+    series = ctx.api.get_series(sid)
     return render_page(
         router,
+        ctx=ctx,
         action="show_series",
         title=series.title,
-        page=api.get_collection_items(collection=sid, page=int(page)),
+        page=ctx.api.get_collection_items(collection=sid, page=int(page)),
         extra={"entity_id": entity_id},
     )
 
 
 @router.route
-def show_season(*, sttngs: Settings, api: API, entity_id: str, page: str = "1") -> Folder:  # noqa: ARG001
+def show_season(*, ctx: Context, entity_id: str, page: str = "1") -> Folder:
     sid = int(entity_id)
-    season = api.get_season(sid)
+    season = ctx.api.get_season(sid)
     return render_page(
         router,
+        ctx=ctx,
         action="show_season",
         title=season.title,
-        page=api.get_collection_items(collection=sid, page=int(page)),
+        page=ctx.api.get_collection_items(collection=sid, page=int(page)),
         extra={"entity_id": entity_id},
         content="episodes",
     )
 
 
 @router.route
-def play(*, sttngs: Settings, api: API, slug: str = "", id: str = "") -> None:  # noqa: A002, ARG001
+def play(*, ctx: Context, slug: str = "", id: str = "") -> None:
     if slug != "":
-        media, data = api.playable_from_slug(slug)
+        media, data = ctx.api.playable_from_slug(slug)
     elif id != "":
-        media, data = api.playable_from_id(int(id))
+        media, data = ctx.api.playable_from_id(int(id))
     else:
         msg = "No slug or id provided"
         raise ValueError(msg)
-    return play_video(router, media, data)
+    return play_video(router, ctx=ctx, media=media, data=data)
 
 
 @router.route
-def add_to_list(*, sttngs: Settings, api: API, entity_type: str, entity_id: str) -> None:  # noqa: ARG001
-    if not api.add_to_list(entity_type, int(entity_id)):
+def add_to_list(*, ctx: Context, entity_type: str, entity_id: str) -> None:
+    if not ctx.api.add_to_list(entity_type, int(entity_id)):
         return None
     notify(_.NOTIFY_ADD_TO_LIST, time=3000)
     return refresh()
 
 
 @router.route
-def remove_from_list(*, sttngs: Settings, api: API, entity_type: str, entity_id: str) -> None:  # noqa: ARG001
-    if not api.remove_from_list(entity_type, int(entity_id)):
+def remove_from_list(*, ctx: Context, entity_type: str, entity_id: str) -> None:
+    if not ctx.api.remove_from_list(entity_type, int(entity_id)):
         return None
     notify(_.NOTIFY_REMOVE_FROM_LIST, time=3000)
     return refresh()
