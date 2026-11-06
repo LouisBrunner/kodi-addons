@@ -1,41 +1,43 @@
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import xbmc
 import xbmcgui
 import xbmcplugin
 
-from .addon import Addon
+from .addon import Addon, KodiArt
 from .api import (
+    API,
     Assets,
     Collection,
     Movie,
     PaginatedMedia,
     Playable,
+    Profile,
     Season,
     Series,
     UnreleasedVideo,
     Video,
     VideoData,
-    thumbnail_formatter,
 )
 from .language import _
-from .router import Router
+from .router import Context, Router
 from .utils import LOGWARNING, log_message
-
-KODI_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
 class Folder:
+    DATE_FORMAT = _.region("datelong")
+
     def __init__(
         self,
         name: int | str,
         *,
+        ctx: Context,
         content: str = "episodes",
         total_items: int | None = None,
     ) -> None:
-        self.__handle = Addon.handle()
+        self.__handle = ctx.handle
         self.__total_items = total_items
         xbmcplugin.setPluginCategory(self.__handle, _(name) if isinstance(name, int) else name)
         xbmcplugin.setContent(self.__handle, content)
@@ -62,15 +64,14 @@ class Folder:
         list_item.setProperty("IsPlayable", "false")
         if special_sort is not None:
             list_item.setProperty("SpecialSort", special_sort)
-        list_item.setArt(
-            {
-                "icon": str(Path(Addon.PATH) / "icon.png"),
-                "thumb": str(Path(Addon.PATH) / "fanart.png"),
-                "fanart": str(Path(Addon.PATH) / "fanart.png"),
-                "landscape": str(Path(Addon.PATH) / "fanart.png"),
-                "poster": str(Path(Addon.PATH) / "poster.png"),
-            }
-        )
+        art: dict[KodiArt, str] = {
+            "icon": str(Path(Addon.PATH) / "icon.png"),
+            "thumb": str(Path(Addon.PATH) / "fanart.png"),
+            "fanart": str(Path(Addon.PATH) / "fanart.png"),
+            "landscape": str(Path(Addon.PATH) / "fanart.png"),
+            "poster": str(Path(Addon.PATH) / "poster.png"),
+        }
+        list_item.setArt(cast("dict[str, str]", art))
         list_item.addContextMenuItems(
             [
                 *(contexts if contexts is not None else []),
@@ -78,11 +79,11 @@ class Folder:
             ],
             replaceItems=True,
         )
-        xbmcplugin.addDirectoryItem(self.__handle, path, list_item, True)  # noqa: FBT003
+        xbmcplugin.addDirectoryItem(self.__handle, path, list_item, isFolder=True)
 
     @classmethod
-    def __assets_to_arts(cls, assets: Assets) -> dict[str, str]:
-        arts: dict[str, str | None] = {
+    def __assets_to_arts(cls, assets: Assets) -> dict[KodiArt, str]:
+        arts: dict[KodiArt, str | None] = {
             "icon": assets.icon,
             "poster": assets.poster,
             "fanart": assets.fanart,
@@ -90,19 +91,19 @@ class Folder:
             "thumb": assets.thumb,
             "landscape": assets.landscape,
         }
-        arts: dict[str, str] = {k: v for k, v in arts.items() if v is not None}
+        arts: dict[KodiArt, str] = {k: v for k, v in arts.items() if v is not None}
         for k, v in arts.items():
-            arts[k] = thumbnail_formatter(v, art=k)
+            arts[k] = API.thumbnail_formatter(v, art=k)
         return arts
 
     @classmethod
-    def __thumbnail_to_arts(cls, thumbnail: str) -> dict[str, str]:
+    def __thumbnail_to_arts(cls, thumbnail: str) -> dict[KodiArt, str]:
         return {
-            "poster": thumbnail_formatter(thumbnail, art="poster"),
-            "fanart": thumbnail_formatter(thumbnail, art="fanart"),
-            "banner": thumbnail_formatter(thumbnail, art="banner"),
-            "thumb": thumbnail_formatter(thumbnail, art="thumb"),
-            "landscape": thumbnail_formatter(thumbnail, art="landscape"),
+            "poster": API.thumbnail_formatter(thumbnail, art="poster"),
+            "fanart": API.thumbnail_formatter(thumbnail, art="fanart"),
+            "banner": API.thumbnail_formatter(thumbnail, art="banner"),
+            "thumb": API.thumbnail_formatter(thumbnail, art="thumb"),
+            "landscape": API.thumbnail_formatter(thumbnail, art="landscape"),
         }
 
     @classmethod
@@ -121,9 +122,9 @@ class Folder:
         list_item.setProperty(Addon.PLAYER_VIDEO_ID, str(video.entity_id))
         list_item.setProperty("IsPlayable", "true")
         if isinstance(video, Movie):
-            list_item.setArt(cls.__assets_to_arts(video.assets))
+            list_item.setArt(cast("dict[str, str]", cls.__assets_to_arts(video.assets)))
         else:
-            list_item.setArt(cls.__thumbnail_to_arts(video.thumbnail))
+            list_item.setArt(cast("dict[str, str]", cls.__thumbnail_to_arts(video.thumbnail)))
 
         list_item.setInfo("video", {})
 
@@ -132,7 +133,7 @@ class Folder:
         info_tag.setPlotOutline(video.short_description)
         info_tag.setTagLine(video.short_description)
         info_tag.setPlot(video.description)
-        info_tag.setDateAdded(video.created_at.strftime(KODI_DATETIME_FORMAT))
+        info_tag.setDateAdded(video.created_at.strftime(cls.DATE_FORMAT))
         info_tag.setDuration(video.duration_s)
 
         contextmenu = []
@@ -151,7 +152,7 @@ class Folder:
         else:
             info_tag.setTags(video.tags)
             if video.release_dates is not None and len(video.release_dates) > 0:
-                info_tag.setFirstAired(video.release_dates[0].date.strftime(KODI_DATETIME_FORMAT))
+                info_tag.setFirstAired(video.release_dates[0].date.strftime(cls.DATE_FORMAT))
                 info_tag.setYear(video.release_dates[0].date.year)
                 info_tag.setCountries([video.release_dates[0].location])
 
@@ -174,7 +175,7 @@ class Folder:
 
             if video.play_state is not None:
                 info_tag.setResumePoint(video.play_state.duration_s, video.duration_s)
-                info_tag.setLastPlayed(video.play_state.last_seen.strftime(KODI_DATETIME_FORMAT))
+                info_tag.setLastPlayed(video.play_state.last_seen.strftime(cls.DATE_FORMAT))
                 if video.play_state.completed:
                     info_tag.setPlaycount(1)
 
@@ -246,7 +247,7 @@ class Folder:
             path=path,
         )
         list_item.setProperty("IsPlayable", "false")
-        list_item.setArt(self.__assets_to_arts(series.assets))
+        list_item.setArt(cast("dict[str, str]", self.__assets_to_arts(series.assets)))
         list_item.setInfo("video", {})
 
         info_tag: xbmc.InfoTagVideo = list_item.getVideoInfoTag()
@@ -254,7 +255,7 @@ class Folder:
         info_tag.setPlotOutline(series.short_description)
         info_tag.setTagLine(series.short_description)
         info_tag.setPlot(series.description)
-        info_tag.setDateAdded(series.created_at.strftime(KODI_DATETIME_FORMAT))
+        info_tag.setDateAdded(series.created_at.strftime(self.DATE_FORMAT))
         # FIXME: if we set a trailer on a folder, then clicking the folder tries (and fails) to play the trailer
         if series.trailer_url is not None and False:  # noqa: SIM223
             path = None
@@ -306,12 +307,12 @@ class Folder:
 
         list_item = xbmcgui.ListItem(label=self.__add_prefix("SEA", season.title), path=path)
         list_item.setProperty("IsPlayable", "false")
-        list_item.setArt(self.__thumbnail_to_arts(season.thumbnail))
+        list_item.setArt(cast("dict[str, str]", self.__thumbnail_to_arts(season.thumbnail)))
         list_item.setInfo("video", {})
 
         info_tag: xbmc.InfoTagVideo = list_item.getVideoInfoTag()
         info_tag.setTitle(season.title)
-        info_tag.setDateAdded(season.created_at.strftime(KODI_DATETIME_FORMAT))
+        info_tag.setDateAdded(season.created_at.strftime(self.DATE_FORMAT))
         # FIXME: if we set a trailer on a folder, then clicking the folder tries (and fails) to play the trailer
         if season.trailer_url is not None and False:  # noqa: SIM223
             path = None
@@ -367,9 +368,9 @@ class Folder:
         )
         list_item.setProperty("IsPlayable", "false")
         if isinstance(collection.thumbnail, str):
-            list_item.setArt(self.__thumbnail_to_arts(collection.thumbnail))
+            list_item.setArt(cast("dict[str, str]", self.__thumbnail_to_arts(collection.thumbnail)))
         else:
-            list_item.setArt(self.__assets_to_arts(collection.thumbnail))
+            list_item.setArt(cast("dict[str, str]", self.__assets_to_arts(collection.thumbnail)))
         list_item.setInfo("video", {})
 
         info_tag: xbmc.InfoTagVideo = list_item.getVideoInfoTag()
@@ -380,7 +381,7 @@ class Folder:
         if collection.short_description is not None:
             info_tag.setPlotOutline(collection.short_description)
         if collection.created_at is not None:
-            info_tag.setDateAdded(collection.created_at.strftime(KODI_DATETIME_FORMAT))
+            info_tag.setDateAdded(collection.created_at.strftime(self.DATE_FORMAT))
         info_tag.setMediaType("tvshow")
 
         contextmenu = []
@@ -440,9 +441,69 @@ class TextDialog:
             self.__on_ok(res)
 
 
+class ProfileDialog:
+    def __init__(
+        self,
+        *,
+        profiles: list[Profile],
+        current: str | None,
+        on_select: Callable[[Profile, str | None], bool],
+        on_done: Callable[[], None],
+    ) -> None:
+        self.__profiles = profiles
+        self.__current = current
+        self.__on_select = on_select
+        self.__on_done = on_done
+
+    @classmethod
+    def __ask_pin(cls) -> str | None:
+        pin = xbmcgui.Dialog().input(_(_.ENTER_PIN), type=xbmcgui.INPUT_ALPHANUM, option=xbmcgui.ALPHANUM_HIDE_INPUT)
+        return pin if pin != "" else None
+
+    def __pick_profile(self) -> Profile | None:
+        dialog = xbmcgui.Dialog()
+        items: list[xbmcgui.ListItem | str] = []
+        for profile in self.__profiles:
+            item = xbmcgui.ListItem(
+                _(_.PROFILE_WITH_PIN).format(name=profile.name) if profile.pin_locked else profile.name
+            )
+            if profile.image:
+                item.setArt({"icon": profile.image, "thumb": profile.image})
+            items.append(item)
+        preselect = next((i for i, p in enumerate(self.__profiles) if p.index == self.__current), -1)
+        picked = dialog.select(_(_.SELECT_PROFILE), items, preselect=preselect, useDetails=True)
+        if picked < 0 or picked >= len(self.__profiles):
+            return None
+        return self.__profiles[picked]
+
+    def render(self) -> None:
+        selected = self.__pick_profile()
+        if selected is None:
+            return
+
+        if not selected.pin_locked:
+            if not self.__on_select(selected, None):
+                notify(_.NOTIFY_PIN_INCORRECT, time=3000)
+            self.__on_done()
+            return
+
+        previous = Addon.CONFIG.get_pin(selected.index)
+        while True:
+            previous = previous or self.__ask_pin()
+            if previous is None:
+                notify(_.NOTIFY_PIN_INCORRECT, time=3000)
+                return
+            if self.__on_select(selected, previous):
+                break
+            previous = None
+
+        self.__on_done()
+
+
 def render_page(  # noqa: PLR0913
     router: Router,
     *,
+    ctx: Context,
     action: str,
     title: int | str,
     page: PaginatedMedia,
@@ -453,6 +514,7 @@ def render_page(  # noqa: PLR0913
         extra = {}
     folder = Folder(
         _(_.PAGE_TITLE).format(page=page.page, title=_(title) if isinstance(title, int) else title),
+        ctx=ctx,
         content=content,
         total_items=len(page.items),
     )
@@ -504,11 +566,11 @@ def notify(message: int, *, time: int) -> None:
     xbmc.executebuiltin(f"Notification({addon_name}, {_(message)}, {time}, {addon_icon})")
 
 
-def play_video(router: Router, media: Playable, data: VideoData) -> None:
+def play_video(router: Router, *, ctx: Context, media: Playable, data: VideoData) -> None:
     li = Folder.info_for_playable(router=router, video=media, path=data.url)
     li.setMimeType(data.mime_type)
     li.setContentLookup(False)
     li.setSubtitles(data.subtitles)
     if Addon.use_inputstream_adaptive():
         li.setProperty("inputstream", "inputstream.adaptive")
-    xbmcplugin.setResolvedUrl(Addon.handle(), succeeded=True, listitem=li)
+    xbmcplugin.setResolvedUrl(ctx.handle, succeeded=True, listitem=li)

@@ -8,8 +8,15 @@ on:
 permissions: {}
 
 jobs:
+  test:
+    name: Test
+    permissions:
+      contents: read
+    uses: ./.github/workflows/test.yml
+
   build:
     name: Build repository
+    needs: [test]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -17,12 +24,17 @@ jobs:
       id-token: write
     steps:
       - name: Checkout the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
+      - name: Setup Just
+        uses: extractions/setup-just@v4.0.0
+        with:
+          just-version: 1.58.0
+
       - name: Build zips
-        run: make
+        run: just build
 
       - name: Upload Pages artifact
         uses: LouisBrunner/.github/.github/actions/upload-pages@main

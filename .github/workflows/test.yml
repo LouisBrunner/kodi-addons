@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: Test
+
+on:
+  pull_request:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  test:
+    name: Test add-ons
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Just
+        uses: extractions/setup-just@v4.0.0
+        with:
+          just-version: 1.58.0
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: true
+
+      - name: Vet the code
+        run: just vet
+
+      - name: Run the tests
+        run: just test

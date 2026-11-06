@@ -14,48 +14,16 @@ msgstr ""
 "Language: en\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-msgctxt "#32001"
-msgid "Email"
-msgstr ""
-
-msgctxt "#32002"
-msgid "Password"
-msgstr ""
-
-msgctxt "#32003"
-msgid "Debug Mode"
-msgstr ""
-
 msgctxt "#32004"
 msgid "Use InputStream Adaptive"
-msgstr ""
-
-msgctxt "#32010"
-msgid "General"
 msgstr ""
 
 msgctxt "#32011"
 msgid "Authentication"
 msgstr ""
 
-msgctxt "#32012"
-msgid "Maintenance"
-msgstr ""
-
-msgctxt "#32013"
-msgid "Debugging"
-msgstr ""
-
-msgctxt "#32014"
-msgid "Playback"
-msgstr ""
-
 msgctxt "#32101"
 msgid "Login"
-msgstr ""
-
-msgctxt "#32102"
-msgid "Continue watching"
 msgstr ""
 
 msgctxt "#32103"
@@ -72,18 +40,6 @@ msgstr ""
 
 msgctxt "#32106"
 msgid "Series"
-msgstr ""
-
-msgctxt "#32107"
-msgid "Search"
-msgstr ""
-
-msgctxt "#32108"
-msgid "Logout"
-msgstr ""
-
-msgctxt "#32109"
-msgid "Settings"
 msgstr ""
 
 msgctxt "#32110"
@@ -112,20 +68,14 @@ msgctxt "#32117"
 msgid "Remove from my list"
 msgstr ""
 
-msgctxt "#32118"
-msgid "Logout"
-msgstr ""
-
 msgctxt "#32119"
-msgid "Press OK to be logged out, this will also clear your credentials."
+msgid "Press OK to be logged out, this will also clear your credentials and saved data.\n"
+"\n"
+"This action cannot be undone."
 msgstr ""
 
 msgctxt "#32120"
 msgid "Featured"
-msgstr ""
-
-msgctxt "#32121"
-msgid "Browse"
 msgstr ""
 
 msgctxt "#32122"
@@ -160,10 +110,6 @@ msgctxt "#32130"
 msgid "{title} - {season}"
 msgstr ""
 
-msgctxt "#32131"
-msgid "New search"
-msgstr ""
-
 msgctxt "#32132"
 msgid "Results for '{query}'"
 msgstr ""
@@ -174,4 +120,16 @@ msgstr ""
 
 msgctxt "#32134"
 msgid "Go to season"
+msgstr ""
+
+msgctxt "#32135"
+msgid "Select profile"
+msgstr ""
+
+msgctxt "#32136"
+msgid "{name} (PIN)"
+msgstr ""
+
+msgctxt "#32137"
+msgid "Enter PIN"
 msgstr ""
