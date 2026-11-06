@@ -23,3 +23,17 @@ extra-paths = ["plugin.video.dropout"]
 
 [tool.uv.workspace]
 members = ["plugin.video.dropout"]
+
+# FIXME: we are tied to the targeted Kodi version
+[tool.uv.audit]
+ignore = [
+  "PYSEC-2026-1872",
+  "PYSEC-2026-1873",
+  "PYSEC-2026-2275",
+  "PYSEC-2026-4170",
+  "PYSEC-2026-4171",
+  "PYSEC-2026-4175",
+  "PYSEC-2026-4176",
+  "PYSEC-2026-4177",
+  "PYSEC-2026-4320",
+]

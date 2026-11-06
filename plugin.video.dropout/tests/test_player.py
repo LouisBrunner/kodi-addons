@@ -16,7 +16,7 @@ class Viewer:
         self.plugin = plugin
         self.kodi = plugin.kodi
 
-    def starts(self, flow: Iterable[_Action]) -> PlayStates:
+    def starts(self, flow: Iterable[_Action]) -> PlayStates:  # noqa: C901
         actions = iter(flow)
 
         abort = False

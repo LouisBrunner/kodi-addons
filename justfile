@@ -21,11 +21,17 @@ setup:
 dev target host="root@libreelec.local":
     hot -d {{ target }} {{ just }} deploy {{ target }} {{ host }}
 
+format:
+    uv run ruff format
+
+vet:
+    uv run ruff check
+
 deploy target host: clean
     scp -r {{ target }}/. {{ host }}:/storage/.kodi/addons/{{ target }}
 
 test target:
-    uv run pytest {{ target }}
+    uv run --all-packages pytest {{ target }}
 
 clean:
     rm -rf {{ out }}

@@ -34,8 +34,8 @@ class Plugin:
     def visit(self, action: str | None = None, **params: str) -> None:
         query = urlencode({**params, **({"action": action} if action else {})})
         self.kodi.addon.expect(self.kodi.addon._.getAddonInfo, "path").returns(str(self.addon_dir))
-        self.kodi.vfs.expect(self.kodi.vfs._.translatePath, "special://profile/addon_data/plugin.video.dropout").returns(
-            self.data_dir
-        )
+        self.kodi.vfs.expect(
+            self.kodi.vfs._.translatePath, "special://profile/addon_data/plugin.video.dropout"
+        ).returns(self.data_dir)
         self.kodi.xbmc.expect(self.kodi.xbmc._.getRegion, "datelong").returns("%B %d, %Y")
         self.load("plugin").dispatch(["plugin://plugin.video.dropout", "1337", f"?{query}"])

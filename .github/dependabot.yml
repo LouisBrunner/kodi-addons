@@ -32,6 +32,17 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    ignore:
+      # FIXME: we are tied to the targeted Kodi version
+      - dependency-name: "beautifulsoup4"
+      - dependency-name: "certifi"
+      - dependency-name: "charset-normalizer"
+      - dependency-name: "idna"
+      - dependency-name: "kodistubs"
+      - dependency-name: "requests"
+      - dependency-name: "soupsieve"
+      - dependency-name: "typing-extensions"
+      - dependency-name: "urllib3"
     groups:
       uv-security:
         applies-to: security-updates
