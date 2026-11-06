@@ -30,7 +30,7 @@ vet:
 deploy target host: clean
     scp -r {{ target }}/. {{ host }}:/storage/.kodi/addons/{{ target }}
 
-test target:
+test target=addons:
     uv run --all-packages pytest {{ target }}
 
 clean:
