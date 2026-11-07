@@ -5,7 +5,7 @@ name = "kodi-dropout"
 version = "0"
 description = "Kodi addon for Dropout.tv"
 readme = "README.md"
-requires-python = ">=3.11.9,<3.12"
+requires-python = ">=3.9.0,<3.10"  # OSMC: 3.9, Kodi: 3.11
 dependencies = [
   "Kodistubs==21.0.0",
   "beautifulsoup4==4.12.2",
@@ -16,9 +16,11 @@ dependencies = [
 [dependency-groups]
 dev = [
   "polib==1.2.0",
-  "pytest==9.1.1",
+  "pytest==8.4.2; python_version < '3.11'",
+  "pytest==9.1.1; python_version >= '3.11'",
   "responses==0.26.3",
-  "time-machine==3.5.1",
+  "time-machine==2.19.0; python_version < '3.11'",
+  "time-machine==3.5.1; python_version >= '3.11'",
   "types-requests==2.31.0.20240406",
 ]
 
@@ -52,6 +54,12 @@ ignore = [
   "N999",
   # documentation
   "D",
+  # FIXME(3.9): remove when we drop 3.9 support
+  "UP007",
+  "UP017",
+  "TC001",
+  "TC002",
+  "TC003",
 ]
 
 [tool.ruff.lint.flake8-builtins]

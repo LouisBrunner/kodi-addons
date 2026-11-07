@@ -1,5 +1,5 @@
 from collections.abc import Iterable
-from typing import Literal
+from typing import Literal, Union
 
 import pytest
 
@@ -8,7 +8,8 @@ from resources.lib.config import PlayState, PlayStates
 from .common import NOW
 from .plugin import Plugin
 
-_Action = float | tuple[int | None, float] | Literal["resume", "pause", "stop", "idle", "end"]
+# FIXME(3.9): use modern union
+_Action = Union[float, tuple[Union[int, None], float], Literal["resume", "pause", "stop", "idle", "end"]]
 
 
 class Viewer:
@@ -16,7 +17,7 @@ class Viewer:
         self.plugin = plugin
         self.kodi = plugin.kodi
 
-    def starts(self, flow: Iterable[_Action]) -> PlayStates:  # noqa: C901
+    def starts(self, flow: Iterable[_Action]) -> PlayStates:
         actions = iter(flow)
 
         abort = False
@@ -25,13 +26,11 @@ class Viewer:
 
         def _harness() -> bool:
             nonlocal abort, pos, item
-            action: float | tuple[int | None, float] | Literal["resume", "pause", "stop", "idle", "end"] | None = next(
-                actions, None
-            )
+            action: _Action | None = next(actions, None)
             if action is None:
                 abort = True
                 return True
-            if isinstance(action, float | int):
+            if isinstance(action, (float, int)):  # FIXME(3.9): use modern union
                 pos = float(action)
             elif isinstance(action, tuple):
                 video, pos = action
@@ -39,20 +38,13 @@ class Viewer:
                 if video is not None:
                     item.setProperty("plugin.video.dropout.video_id", str(video))
                 self.kodi.player.real.onPlayBackStarted()
-            else:
-                match action:
-                    case "resume":
-                        pass
-                    case "pause":
-                        pass
-                    case "stop":
-                        pos = None
-                        item = None
-                        self.kodi.player.real.onPlayBackStopped()
-                    case "end":
-                        pos = None
-                        item = None
-                        self.kodi.player.real.onPlayBackEnded()
+            elif action in {"stop", "end"}:
+                pos = None
+                item = None
+                if action == "stop":
+                    self.kodi.player.real.onPlayBackStopped()
+                else:
+                    self.kodi.player.real.onPlayBackEnded()
             return False
 
         def _get_time() -> float:

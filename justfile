@@ -13,7 +13,7 @@ build: && (_build_html_listings out)
     zip -r {{ out }}/repo.zip repo
 
 serve:
-    python3 -m http.server -d $(OUT_FOLDER)
+    python3 -m http.server -d {{ out }}
 
 setup:
     uv sync --all-packages
@@ -24,13 +24,14 @@ dev target host="root@libreelec.local":
 format:
     uv run ruff format
 
-vet:
+vet: setup
     uv run ruff check
+    uv run ty check
 
 deploy target host: clean
     scp -r {{ target }}/. {{ host }}:/storage/.kodi/addons/{{ target }}
 
-test target=addons:
+test target=addons: setup
     uv run --all-packages pytest {{ target }}
 
 clean:

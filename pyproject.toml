@@ -10,7 +10,7 @@ readme = "README.md"
 dev = ["ruff==0.16.6", "ty==0.0.80"]
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py39"  # OSMC: 3.9, Kodi: 3.11
 
 [tool.ruff.lint.per-file-ignores]
 "vendor/*.py" = ["ALL"]
@@ -36,4 +36,8 @@ ignore = [
   "PYSEC-2026-4176",
   "PYSEC-2026-4177",
   "PYSEC-2026-4320",
+  # FIXME(3.9): for the older versions
+  "PYSEC-2026-1845",
+  "PYSEC-2026-141",
+  "PYSEC-2026-142",
 ]

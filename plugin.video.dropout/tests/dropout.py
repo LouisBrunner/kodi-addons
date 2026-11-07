@@ -1,3 +1,6 @@
+# FIXME(3.9): drop in 3.10/11
+from __future__ import annotations
+
 import json
 import logging
 import random
@@ -23,10 +26,10 @@ class Dropout:
         subscribed: bool
         session: str
 
-        def renewed(self, token: str, session: str) -> "Dropout.Credentials":
+        def renewed(self, token: str, session: str) -> Dropout.Credentials:
             return Dropout.Credentials(token=token, user_id=self.user_id, subscribed=self.subscribed, session=session)
 
-        def for_profile(self, index: int | str) -> "Dropout.Credentials":
+        def for_profile(self, index: int | str) -> Dropout.Credentials:
             return Dropout.Credentials(
                 token=f"{self.token}.profile{index}",
                 user_id=self.user_id,

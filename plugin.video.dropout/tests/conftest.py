@@ -1,3 +1,6 @@
+# FIXME(3.9): drop in 3.10/11
+from __future__ import annotations
+
 import datetime as dt
 from collections.abc import Generator, Iterator
 from pathlib import Path

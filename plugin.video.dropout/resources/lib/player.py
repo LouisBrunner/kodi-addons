@@ -31,7 +31,7 @@ class MonitorPlayer(xbmc.Player):
             completed=completed,
             timecode=0,
             duration_s=self.last_pos,
-            last_seen=datetime.datetime.now(tz=datetime.UTC),
+            last_seen=datetime.datetime.now(tz=datetime.timezone.utc),
         )
         Addon.CONFIG.set_playstate(self.playing, ps)
         log_message(f"Updated play state for video {self.playing}: {ps}")
