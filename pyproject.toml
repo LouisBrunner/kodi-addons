@@ -36,4 +36,8 @@ ignore = [
   "PYSEC-2026-4176",
   "PYSEC-2026-4177",
   "PYSEC-2026-4320",
+  # FIXME(3.9): for the older versions
+  "PYSEC-2026-1845",
+  "PYSEC-2026-141",
+  "PYSEC-2026-142",
 ]
