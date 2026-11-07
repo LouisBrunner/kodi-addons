@@ -3,7 +3,7 @@
   id="plugin.video.dropout"
   name="Dropout.tv"
   provider-name="LouisBrunner"
-  version="0.3.0"
+  version="0.3.1"
 >
 	<requires>
 		<import addon="xbmc.python" version="3.0.1" />
