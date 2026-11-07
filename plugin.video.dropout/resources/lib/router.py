@@ -1,3 +1,6 @@
+# FIXME(3.9): drop in 3.10/11
+from __future__ import annotations
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any

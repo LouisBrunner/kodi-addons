@@ -1,3 +1,6 @@
+# FIXME(3.9): drop in 3.10/11
+from __future__ import annotations
+
 import datetime
 import json
 import time
@@ -5,12 +8,15 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Self, TypeVar, cast
+from typing import Any, TypeVar, Union, cast
 
 from requests.cookies import RequestsCookieJar, create_cookie
-from typing_extensions import override
 
-_JSON = dict[str, "_JSON"] | list["_JSON"] | str | int | float | bool | None
+# FIXME(3.9): should be typing.Self
+from typing_extensions import Self, override  # noqa: UP035
+
+# FIXME(3.9): use modern union
+_JSON = Union[dict[str, "_JSON"], list["_JSON"], str, int, float, bool, None]
 _JSON_DICT = dict[str, Any]
 
 
@@ -26,7 +32,7 @@ class _Serial(ABC):
 
     @classmethod
     @abstractmethod
-    def from_dict(cls, data: _JSON_DICT) -> "_Serial": ...
+    def from_dict(cls, data: _JSON_DICT) -> _Serial: ...
 
     @abstractmethod
     def to_dict(self) -> _JSON: ...
@@ -42,7 +48,7 @@ class PlayState(_Serial):
 
     @classmethod
     @override
-    def from_dict(cls, data: _JSON_DICT) -> "PlayState":
+    def from_dict(cls, data: _JSON_DICT) -> PlayState:
         return cls(
             completed=data["completed"],
             duration_s=data["duration_s"],
@@ -65,14 +71,14 @@ class PlayState(_Serial):
         parsed = datetime.datetime.fromisoformat(last_seen)
         if parsed.tzinfo is None:
             # legacy entries were stored without a timezone, assume UTC (as newer ones are)
-            parsed = parsed.replace(tzinfo=datetime.UTC)
+            parsed = parsed.replace(tzinfo=datetime.timezone.utc)
         return parsed
 
 
 class PlayStates(dict[int, PlayState], _Serial):
     @classmethod
     @override
-    def from_dict(cls, data: _JSON_DICT) -> "PlayStates":
+    def from_dict(cls, data: _JSON_DICT) -> PlayStates:
         return cls({int(k): PlayState.from_dict(v) for k, v in data.items()})
 
     @override
@@ -87,7 +93,7 @@ class Search(_Serial):
 
     @classmethod
     @override
-    def from_dict(cls, data: _JSON_DICT) -> "Search":
+    def from_dict(cls, data: _JSON_DICT) -> Search:
         return cls(
             search=data["search"],
             first=datetime.datetime.fromisoformat(data["first"]),
@@ -107,7 +113,7 @@ class Searches(_Serial):
 
     @classmethod
     @override
-    def from_dict(cls, data: _JSON_DICT) -> "Searches":
+    def from_dict(cls, data: _JSON_DICT) -> Searches:
         return cls(
             searches=[Search.from_dict(s) for s in data.get("searches", [])],
         )
@@ -128,7 +134,7 @@ class Profile(_Serial):
 
     @classmethod
     @override
-    def from_dict(cls, data: _JSON_DICT) -> "Profile":
+    def from_dict(cls, data: _JSON_DICT) -> Profile:
         return cls(
             index=data["index"],
             name=data["name"],
@@ -158,7 +164,7 @@ class Credentials(_Serial):
 
     @classmethod
     @override
-    def from_dict(cls, data: _JSON_DICT) -> "Credentials":
+    def from_dict(cls, data: _JSON_DICT) -> Credentials:
         return cls(
             hash=data["hash"],
             token=data["token"],
@@ -189,7 +195,7 @@ class Watchlist(_Serial):
 
     @classmethod
     @override
-    def from_dict(cls, data: _JSON_DICT) -> "Watchlist":
+    def from_dict(cls, data: _JSON_DICT) -> Watchlist:
         return cls(
             ids=data["ids"],
             when=datetime.datetime.fromisoformat(data["when"]),
@@ -211,7 +217,7 @@ class CookieJar(RequestsCookieJar, _Serial):  # ty: ignore[invalid-method-overri
 
     @classmethod
     @override
-    def from_dict(cls, data: _JSON_DICT) -> "CookieJar":
+    def from_dict(cls, data: _JSON_DICT) -> CookieJar:
         jar = cls()
         entries = data.get("cookies")
         for entry in entries if isinstance(entries, list) else []:
@@ -306,7 +312,7 @@ class Config:
             searches.searches.append(
                 Search(
                     search=search,
-                    first=datetime.datetime.now(tz=datetime.UTC),
+                    first=datetime.datetime.now(tz=datetime.timezone.utc),
                 )
             )
             if len(searches.searches) > self._MAX_SEARCHES:

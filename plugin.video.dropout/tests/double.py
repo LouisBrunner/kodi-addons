@@ -1,3 +1,6 @@
+# FIXME(3.9): drop in 3.10/11
+from __future__ import annotations
+
 import inspect
 import logging
 import sys
@@ -5,10 +8,13 @@ from collections import OrderedDict
 from collections.abc import Callable
 from functools import partial
 from types import ModuleType
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, ParamSpec, Protocol, Self, TypeVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, Protocol, TypeVar, cast
 from unittest import mock
 
 import pytest
+
+# FIXME(3.9): should be typing.Self
+from typing_extensions import ParamSpec, Self  # noqa: UP035
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +34,7 @@ class Double(Generic[T]):
             object.__setattr__(self, "_data", dict(bound.arguments))
 
         @classmethod
-        def expected(cls, **kwargs: Any) -> "Double.POD":  # noqa: ANN401
+        def expected(cls, **kwargs: Any) -> Double.POD:  # noqa: ANN401
             this = cls()
             for k, v in kwargs.items():
                 this._data[k] = v
@@ -51,19 +57,19 @@ class Double(Generic[T]):
             values = list(bound.arguments.values())[1:]
             verb, key = name[:3], name[3:]
             key = key[0].lower() + key[1:]
-            match verb, values:
-                case "set", [value]:
-                    self._data[key] = value
-                case "set", [key, value]:
-                    self._data[f"prop_{key}"] = value
-                case "get", []:
-                    return self._data.get(key)
-                case "get", [key]:
-                    return self._data.get(f"prop_{key}")
-                case _:
-                    self._data.setdefault(f"call_{name}", []).append(
-                        {k: v for k, v in bound.arguments.items() if k != "self"}
-                    )
+            # FIXME(3.9): move back to match
+            if verb == "set" and len(values) == 1:
+                self._data[key] = values[0]
+            elif verb == "set" and len(values) == 2:
+                self._data[f"prop_{values[0]}"] = values[1]
+            elif verb == "get" and len(values) == 0:
+                return self._data.get(key)
+            elif verb == "get" and len(values) == 1:
+                return self._data.get(f"prop_{values[0]}")
+            else:
+                self._data.setdefault(f"call_{name}", []).append(
+                    {k: v for k, v in bound.arguments.items() if k != "self"}
+                )
             return None
 
         def __repr__(self) -> str:
@@ -84,7 +90,7 @@ class Double(Generic[T]):
         def __call__(self, produce: Callable[[], R], *, many: bool = False) -> None: ...
 
     class Returning(Generic[R]):
-        def __init__(self, register: "Double._Register") -> None:
+        def __init__(self, register: Double._Register) -> None:
             self._register = register
 
         def returns(self, value: R, *, many: bool = False) -> Self:
@@ -98,7 +104,7 @@ class Double(Generic[T]):
             self._register(fail)
             return self
 
-    _pending: ClassVar[list["Double[Any]"]] = []
+    _pending: ClassVar[list[Double[Any]]] = []
 
     @classmethod
     def reset(cls) -> None:
@@ -120,7 +126,8 @@ class Double(Generic[T]):
             self._answers[method] = []
             method.side_effect = partial(self._answer, method, name)
         for name, value in vars(cls).items():
-            if isinstance(value, int | str) and not name.startswith("_"):
+            # FIXME(3.9): use modern union
+            if (isinstance(value, (int, str))) and not name.startswith("_"):
                 setattr(self.mock, name, value)
         self._ = cast("T", self.mock)
         self._instances = []
@@ -150,7 +157,8 @@ class Double(Generic[T]):
 
         def register(produce: Callable[[], R], *, many: bool = False) -> None:
             if double not in self._answers:
-                pytest.fail(f"method {double} is not a mock")
+                # FIXME(3.9): bad type support
+                pytest.fail(f"method {double} is not a mock")  # ty: ignore[invalid-argument-type]
             self._answers[double].append((expected, produce, many))
 
         return self.Returning(register)
@@ -208,7 +216,8 @@ class Double(Generic[T]):
                 fn = self._fmt_call(self._fqdn(method.__name__), expected.args, expected.kwargs)
                 issues.append(f"expected call not made: {fn}")
         if issues:
-            pytest.fail("\n".join(issues))
+            # FIXME(3.9): bad type support
+            pytest.fail("\n".join(issues))  # ty: ignore[invalid-argument-type]
 
     @classmethod
     def get_methods(cls, obj: type[T] | ModuleType) -> OrderedDict[str, Any]:
@@ -218,7 +227,7 @@ class Double(Generic[T]):
             )
         return OrderedDict((name, getattr(obj, name)) for name in dir(obj) if inspect.isfunction(getattr(obj, name)))
 
-    def sub_double(self, cls: type[T]) -> "Double[T]":
+    def sub_double(self, cls: type[T]) -> Double[T]:
         dbl = Double(cls)
         self.__subtype(
             cls.__name__,

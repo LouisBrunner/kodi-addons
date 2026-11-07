@@ -10,7 +10,7 @@ readme = "README.md"
 dev = ["ruff==0.16.6", "ty==0.0.80"]
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py39"  # OSMC: 3.9, Kodi: 3.11
 
 [tool.ruff.lint.per-file-ignores]
 "vendor/*.py" = ["ALL"]

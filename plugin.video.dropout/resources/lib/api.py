@@ -1,10 +1,13 @@
+# FIXME(3.9): drop in 3.10/11
+from __future__ import annotations
+
 import datetime
 import hashlib
 import html
 import json
 import re
 from dataclasses import dataclass
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, Union
 from urllib.parse import urlencode
 
 import requests
@@ -120,13 +123,21 @@ class ReleasedVideo:
     is_in_list: bool = False
 
 
-Video = UnreleasedVideo | ReleasedVideo
+# FIXME(3.9): use modern union
+Video = Union[UnreleasedVideo, ReleasedVideo]
 
 
-@dataclass(kw_only=True)
-class Movie(ReleasedVideo):
+@dataclass
+class _MovieFields:
     assets: Assets
     trailer_url: str | int | None
+
+
+# FIXME(3.9): change back in 3.10
+# @dataclass(kw_only=True) + inline _MovieFields
+@dataclass
+class Movie(ReleasedVideo, _MovieFields):
+    pass
 
 
 @dataclass
@@ -143,8 +154,9 @@ class Season:
     is_in_list: bool = False
 
 
-Media = Collection | Series | Season | Video | Movie
-Playable = Video | Movie
+# FIXME(3.9): use modern union
+Media = Union[Collection, Series, Season, Video, Movie]
+Playable = Union[Video, Movie]
 
 
 @dataclass
@@ -185,6 +197,10 @@ class API:
     UserCredentials = tuple[str, str]
     APICredentials = tuple[str, int]
 
+    # FIXME(3.9): use *APICredentials instead of inlining
+    CredentialsWithProfile = tuple[str, int, list[Profile]]
+    CredentialsWithSub = tuple[str, int, bool]
+
     stage: Stage = "login"
 
     def __init__(self, *, credentials: UserCredentials) -> None:
@@ -209,7 +225,7 @@ class API:
         username, password = creds
         return hashlib.sha256(f"{username}{password}".encode()).hexdigest()
 
-    def __login_start(self, creds: UserCredentials) -> "API.Stage":
+    def __login_start(self, creds: UserCredentials) -> API.Stage:
         new_hash = self.__calculate_hash(creds)
 
         reselect = True
@@ -291,19 +307,19 @@ class API:
                 hash=self.__new_hash,
                 token=self.__token,
                 user_id=self.__user_id,
-                when=datetime.datetime.now(tz=datetime.UTC),
+                when=datetime.datetime.now(tz=datetime.timezone.utc),
                 profiles=self.__profiles,
                 selected_profile=selected_profile,
                 pins=pins,
             )
         )
 
-    def __cached_login(self, new_hash: str) -> tuple[*APICredentials, list[Profile]] | None:
+    def __cached_login(self, new_hash: str) -> CredentialsWithProfile | None:
         current = Addon.CONFIG.get_credentials()
         if current is None:
             return None
 
-        now = datetime.datetime.now(tz=datetime.UTC)
+        now = datetime.datetime.now(tz=datetime.timezone.utc)
         age = now - current.when
 
         if new_hash == current.hash and age < self._MAX_CREDENTIALS_AGE and len(current.profiles) > 0:
@@ -319,7 +335,7 @@ class API:
         )
         return None
 
-    def __do_login(self, creds: UserCredentials) -> tuple[*APICredentials, bool] | None:
+    def __do_login(self, creds: UserCredentials) -> CredentialsWithSub | None:
         username, password = creds
         if username == "" or password == "":
             log_message("no credentials set, cannot login", level=LOGWARNING)
@@ -341,11 +357,11 @@ class API:
             log_message(f"login failed {res.status_code} with {res.text[:100]}", level=LOGWARNING)
         return account
 
-    def __resume_session(self) -> tuple[*APICredentials, bool] | None:
+    def __resume_session(self) -> CredentialsWithSub | None:
         return self.__read_account(self.__website_request("/"))
 
     @classmethod
-    def __read_account(cls, res: requests.Response) -> tuple[*APICredentials, bool] | None:
+    def __read_account(cls, res: requests.Response) -> CredentialsWithSub | None:
         if not res.ok:
             return None
         token_info = re.search(TOKEN_FINDER, res.text)
@@ -516,14 +532,16 @@ class API:
         cached = Addon.CONFIG.get_watchlist()
         if cached is None:
             return False
-        if datetime.datetime.now(tz=datetime.UTC) > cached.when + datetime.timedelta(minutes=5):
+        if datetime.datetime.now(tz=datetime.timezone.utc) > cached.when + datetime.timedelta(minutes=5):
             return False
         self.__my_list = set(cached.ids)
         return True
 
     def __save_watchlist_cache(self) -> None:
         assert self.__my_list is not None  # noqa: S101
-        Addon.CONFIG.set_watchlist(Watchlist(ids=list(self.__my_list), when=datetime.datetime.now(tz=datetime.UTC)))
+        Addon.CONFIG.set_watchlist(
+            Watchlist(ids=list(self.__my_list), when=datetime.datetime.now(tz=datetime.timezone.utc))
+        )
 
     def __clear_watchlist_cache(self) -> None:
         self.__my_list = None
@@ -573,7 +591,7 @@ class API:
                 key=lambda i: (
                     i.play_state.last_seen
                     if isinstance(i, ReleasedVideo) and i.play_state is not None
-                    else datetime.datetime.min.replace(tzinfo=datetime.UTC)
+                    else datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
                 ),
                 reverse=True,
             )
@@ -873,48 +891,48 @@ class API:
             item = item["entity"]
             is_embedded = False
         need_play_state = False
-        match item.get("type"):
-            case "video":
-                log_message(
-                    f"found video {item}, embedded={is_embedded}",
-                    level=LOGDEBUG,
+        # FIXME(3.9): move back to match
+        if item.get("type") == "video":
+            log_message(
+                f"found video {item}, embedded={is_embedded}",
+                level=LOGDEBUG,
+            )
+            media = self.__parse_video(item, embedded=is_embedded)
+            if "_embedded" in item and "play_state" in item["_embedded"] and isinstance(media, ReleasedVideo):
+                media.play_state = self.__if_more_recent(
+                    media.play_state,
+                    self.__parse_play_state(item["_embedded"]["play_state"]),
                 )
-                media = self.__parse_video(item, embedded=is_embedded)
-                if "_embedded" in item and "play_state" in item["_embedded"] and isinstance(media, ReleasedVideo):
-                    media.play_state = self.__if_more_recent(
-                        media.play_state,
-                        self.__parse_play_state(item["_embedded"]["play_state"]),
-                    )
-                else:
-                    need_play_state = isinstance(media, ReleasedVideo)
-            case "movie":
-                log_message(
-                    f"found movie {item}, embedded={is_embedded}",
-                    level=LOGDEBUG,
-                )
-                media = self.__parse_movie(item, embedded=is_embedded, is_my_list=is_my_list)
-                need_play_state = True
-            case "season":
-                log_message(
-                    f"found season {item}, embedded={is_embedded}",
-                    level=LOGDEBUG,
-                )
-                media = self.__parse_season(item, embedded=is_embedded)
-            case "series":
-                log_message(
-                    f"found series {item}, embedded={is_embedded}",
-                    level=LOGDEBUG,
-                )
-                media = self.__parse_series(item, embedded=is_embedded)
-            case None:
-                log_message(
-                    f"found collection {item}, embedded={is_embedded}",
-                    level=LOGDEBUG,
-                )
-                media = self.__parse_collection(item, embedded=is_embedded)
-            case _:
-                msg = f"unknown type {item['type']}"
-                raise ValueError(msg)
+            else:
+                need_play_state = isinstance(media, ReleasedVideo)
+        elif item.get("type") == "movie":
+            log_message(
+                f"found movie {item}, embedded={is_embedded}",
+                level=LOGDEBUG,
+            )
+            media = self.__parse_movie(item, embedded=is_embedded, is_my_list=is_my_list)
+            need_play_state = True
+        elif item.get("type") == "season":
+            log_message(
+                f"found season {item}, embedded={is_embedded}",
+                level=LOGDEBUG,
+            )
+            media = self.__parse_season(item, embedded=is_embedded)
+        elif item.get("type") == "series":
+            log_message(
+                f"found series {item}, embedded={is_embedded}",
+                level=LOGDEBUG,
+            )
+            media = self.__parse_series(item, embedded=is_embedded)
+        elif item.get("type") is None:
+            log_message(
+                f"found collection {item}, embedded={is_embedded}",
+                level=LOGDEBUG,
+            )
+            media = self.__parse_collection(item, embedded=is_embedded)
+        else:
+            msg = f"unknown type {item['type']}"
+            raise ValueError(msg)
         if is_my_list:
             media.is_in_list = True
         elif self.__my_list is not None:
@@ -996,7 +1014,7 @@ class API:
             completed=ps["completed"],
             duration_s=ps["duration"],
             timecode=ps["timecode"],
-            last_seen=datetime.datetime.fromtimestamp(ps["timestamp"], tz=datetime.UTC),
+            last_seen=datetime.datetime.fromtimestamp(ps["timestamp"], tz=datetime.timezone.utc),
         )
 
     def __get_play_state(self, video_ids: list[int]) -> list[dict]:
@@ -1015,11 +1033,13 @@ class API:
 
     @classmethod
     def __parse_datetime(cls, dt: str, *, embedded: bool) -> datetime.datetime:
-        return datetime.datetime.strptime(dt, cls.__datetime_format(embedded=embedded)).astimezone(tz=datetime.UTC)
+        return datetime.datetime.strptime(dt, cls.__datetime_format(embedded=embedded)).astimezone(
+            tz=datetime.timezone.utc
+        )
 
     @classmethod
     def __parse_date(cls, dt: str) -> datetime.date:
-        return datetime.datetime.strptime(dt, "%Y-%m-%d").astimezone(tz=datetime.UTC).date()
+        return datetime.datetime.strptime(dt, "%Y-%m-%d").astimezone(tz=datetime.timezone.utc).date()
 
     def __parse_video(self, item: dict, *, embedded: bool = False) -> Video:
         if "metadata" not in item:
