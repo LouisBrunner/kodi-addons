@@ -14,122 +14,141 @@ msgstr ""
 "Language: en\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+# settings.general.playback.use_inputstream_adaptive
 msgctxt "#32004"
 msgid "Use InputStream Adaptive"
 msgstr ""
 
+# settings.general.authentication
 msgctxt "#32011"
 msgid "Authentication"
 msgstr ""
 
+# LOGIN
 msgctxt "#32101"
 msgid "Login"
 msgstr ""
 
+# MY_LIST
 msgctxt "#32103"
 msgid "My list"
 msgstr ""
 
+# NEW_RELEASES
 msgctxt "#32104"
 msgid "New Releases"
 msgstr ""
 
+# TRENDING
 msgctxt "#32105"
 msgid "Trending"
 msgstr ""
 
+# SERIES
 msgctxt "#32106"
 msgid "Series"
 msgstr ""
 
+# SUBSCRIPTION_REQUIRED
 msgctxt "#32110"
 msgid "Subscription required"
 msgstr ""
 
+# LOGIN_MESSAGE
 msgctxt "#32111"
 msgid "You need to provide your username/password for Dropout.tv in order to access videos through this add-on.\n"
 "\n"
 "Please fill the details in the General > Authentication section of the Settings."
 msgstr ""
 
+# HOME_TITLE
 msgctxt "#32112"
 msgid "Dropout.tv Home"
 msgstr ""
 
+# LOGIN_WITH_SUBSCRIPTION
 msgctxt "#32113"
 msgid "Login with an account with a valid subscription"
 msgstr ""
 
+# ADD_TO_LIST
 msgctxt "#32116"
 msgid "Add to my list"
 msgstr ""
 
+# REMOVE_FROM_LIST
 msgctxt "#32117"
 msgid "Remove from my list"
 msgstr ""
 
+# LOGOUT_MESSAGE
 msgctxt "#32119"
 msgid "Press OK to be logged out, this will also clear your credentials and saved data.\n"
 "\n"
 "This action cannot be undone."
 msgstr ""
 
+# FEATURED
 msgctxt "#32120"
 msgid "Featured"
 msgstr ""
 
+# PAGE_TITLE
 msgctxt "#32122"
 msgid "{title} - Page {page}"
 msgstr ""
 
+# NEXT_PAGE
 msgctxt "#32123"
 msgid "Next - Page {page}"
 msgstr ""
 
+# PREVIOUS_PAGE
 msgctxt "#32124"
 msgid "Previous - Page {page}"
 msgstr ""
 
+# NOTIFY_ADD_TO_LIST
 msgctxt "#32125"
 msgid "Added to my list"
 msgstr ""
 
+# NOTIFY_REMOVE_FROM_LIST
 msgctxt "#32126"
 msgid "Removed from my list"
 msgstr ""
 
+# GO_TO_SERIES
 msgctxt "#32128"
 msgid "Go to series"
 msgstr ""
 
-msgctxt "#32129"
-msgid "Season {season}"
-msgstr ""
-
-msgctxt "#32130"
-msgid "{title} - {season}"
-msgstr ""
-
+# SEARCH_RESULTS_FOR
 msgctxt "#32132"
 msgid "Results for '{query}'"
 msgstr ""
 
+# REMOVE_SEARCH
 msgctxt "#32133"
 msgid "Remove search"
 msgstr ""
 
+# GO_TO_SEASON
 msgctxt "#32134"
 msgid "Go to season"
 msgstr ""
 
+# SELECT_PROFILE
 msgctxt "#32135"
 msgid "Select profile"
 msgstr ""
 
+# PROFILE_WITH_PIN
 msgctxt "#32136"
 msgid "{name} (PIN)"
 msgstr ""
 
+# ENTER_PIN
 msgctxt "#32137"
 msgid "Enter PIN"
 msgstr ""

@@ -125,6 +125,7 @@ class ReleasedVideo:
 
 # FIXME(3.9): use modern union
 Video = Union[UnreleasedVideo, ReleasedVideo]
+VIDEO_TYPES = (UnreleasedVideo, ReleasedVideo)
 
 
 @dataclass
@@ -580,7 +581,7 @@ class API:
         if page == 1:
             all_play_states = Addon.CONFIG.get_playstates()
             for i in res.items:
-                if isinstance(i, Video) and i.entity_id in all_play_states:
+                if isinstance(i, VIDEO_TYPES) and i.entity_id in all_play_states:
                     del all_play_states[i.entity_id]
             all_play_states = dict(filter(lambda i: not i[1].completed, all_play_states.items()))
             log_message(f"continue watching [FROM CONFIG]: {all_play_states}", level=LOGDEBUG)
@@ -1147,7 +1148,7 @@ class API:
         page = self.__get_from_collection(page=1, collection=item["id"], is_my_list=is_my_list)
         vid = None
         for i in page.items:
-            if not isinstance(i, Video):
+            if not isinstance(i, VIDEO_TYPES):
                 continue
             if vid is None or vid.duration_s < i.duration_s:
                 vid = i

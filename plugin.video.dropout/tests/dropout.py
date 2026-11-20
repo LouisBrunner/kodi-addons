@@ -283,11 +283,20 @@ window.VHX.config = {
             match=[
                 self._log_request,
                 self._authorized(creds.token),
-                matchers.query_param_matcher({"page": str(page)}),
+                matchers.query_param_matcher(
+                    {
+                        "page": str(page),
+                        "per_page": "25",
+                        "include_events": "1",
+                        "include_products": "True",
+                        "product": f"{self._TV}/products/28599",
+                        "site_id": "36348",
+                    }
+                ),
             ],
         )
 
-    def my_list(self, creds: Credentials, page: int, items: list, *, works: bool) -> None:
+    def my_list(self, creds: Credentials, page: int | None, items: list, *, works: bool) -> None:
         self.http.get(
             f"{self._TV}/customers/{creds.user_id}/watchlist",
             status=200 if works else 400,
@@ -295,7 +304,14 @@ window.VHX.config = {
             match=[
                 self._log_request,
                 self._authorized(creds.token),
-                matchers.query_param_matcher({"page": str(page)}, strict_match=False),
+                matchers.query_param_matcher(
+                    {
+                        **({} if page is None else {"page": str(page), "per_page": "25"}),
+                        "product": "28599",
+                        "collection": f"{self._TV}/customers/{creds.user_id}/watchlist",
+                        "include_products": "True",
+                    }
+                ),
             ],
         )
 

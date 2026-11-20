@@ -27,17 +27,21 @@ members = ["plugin.video.dropout"]
 # FIXME: we are tied to the targeted Kodi version
 [tool.uv.audit]
 ignore = [
-  "PYSEC-2026-1872",
-  "PYSEC-2026-1873",
-  "PYSEC-2026-2275",
-  "PYSEC-2026-4170",
-  "PYSEC-2026-4171",
-  "PYSEC-2026-4175",
-  "PYSEC-2026-4176",
-  "PYSEC-2026-4177",
-  "PYSEC-2026-4320",
+  "PYSEC-2026-1872",  # requests: pinned directly (==2.31.0), .netrc leak
+  "PYSEC-2026-1873",  # requests: pinned directly (==2.31.0), verify=False session reuse
+  "PYSEC-2026-2275",  # requests: pinned directly (==2.31.0), zipped-path extraction
+  "PYSEC-2026-4170",  # soupsieve: transitive via beautifulsoup4==4.12.2, selector ReDoS
+  "PYSEC-2026-4171",  # soupsieve: transitive via beautifulsoup4==4.12.2, whitespace ReDoS
+  "PYSEC-2026-4175",  # urllib3: transitive via requests, HTTPS proxy TLS config ignored
+  "PYSEC-2026-4176",  # urllib3: transitive via requests, chunked deflate infinite loop
+  "PYSEC-2026-4177",  # urllib3: transitive via requests, unbounded chunk-size line
+  "PYSEC-2026-4320",  # certifi: transitive via requests, emSign root CAs
+  "GHSA-4j63-6c4x-wfg4",  # soupsieve: transitive via beautifulsoup4, :has() quadratic time
+  "GHSA-6655-6qjp-jx7x",  # soupsieve: transitive via beautifulsoup4, selector compile ReDoS
+  "GHSA-7g44-g9rc-x53w",  # soupsieve: transitive via beautifulsoup4, CSS parser recursion
+  "GHSA-mmhr-3c5m-f64f",  # soupsieve: transitive via beautifulsoup4, descendant combinator DoS
   # FIXME(3.9): for the older versions
-  "PYSEC-2026-1845",
-  "PYSEC-2026-141",
-  "PYSEC-2026-142",
+  "PYSEC-2026-1845",  # pytest: dev dependency (8.4.2 on Python < 3.11), tmpdir handling
+  "PYSEC-2026-141",  # urllib3: transitive via requests, fixed in 2.7.0 (not on 3.9)
+  "PYSEC-2026-142",  # urllib3: transitive via requests, fixed in 2.7.0 (not on 3.9)
 ]

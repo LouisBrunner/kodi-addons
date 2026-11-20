@@ -4,6 +4,7 @@ from __future__ import annotations
 import datetime as dt
 from collections.abc import Generator, Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 import responses
@@ -130,7 +131,7 @@ def with_settings(kodi: Kodi, test_settings: Settings) -> Settings:
     return add_settings(kodi, test_settings)
 
 
-FolderAction = tuple[str, xbmcgui.ListItem, bool]
+FolderAction = tuple[str, xbmcgui.ListItem, dict[str, Any]]
 
 AddonArt = {
     "icon": str(Path(__file__).parents[2] / "icon.png"),
@@ -144,13 +145,13 @@ AddonArt = {
 def make_view(kodi: Kodi, title: str, content: str, *actions: FolderAction) -> None:
     kodi.plugin.expect(kodi.plugin._.setPluginCategory, 1337, title).returns(None)
     kodi.plugin.expect(kodi.plugin._.setContent, 1337, content).returns(None)
-    for url, item, is_folder in actions:
-        kodi.plugin.expect(kodi.plugin._.addDirectoryItem, 1337, url, item, is_folder).returns(value=True)
+    for url, item, extra in actions:
+        kodi.plugin.expect(kodi.plugin._.addDirectoryItem, 1337, url, item, **extra).returns(value=True)
     kodi.plugin.expect(kodi.plugin._.endOfDirectory, 1337, cacheToDisc=False).returns(None)
 
 
-def folder(kodi: Kodi, label: str, action: str) -> FolderAction:
-    url = f"plugin://plugin.video.dropout?action={action}"
+def folder(kodi: Kodi, label: str, action: str, *, args: str = "", **extras: Any) -> FolderAction:  # noqa: ANN401
+    url = f"plugin://plugin.video.dropout?{args}action={action}"
     item = kodi.ListItem.expected(
         label=label,
         path=url,
@@ -162,8 +163,9 @@ def folder(kodi: Kodi, label: str, action: str) -> FolderAction:
                 "replaceItems": True,
             }
         ],
+        **extras,
     )
-    return (url, item, True)
+    return (url, item, {"isFolder": True})
 
 
 def home_no_profile(kodi: Kodi) -> None:

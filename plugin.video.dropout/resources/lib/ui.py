@@ -12,6 +12,7 @@ import xbmcplugin
 from .addon import Addon, KodiArt
 from .api import (
     API,
+    VIDEO_TYPES,
     Assets,
     Collection,
     Movie,
@@ -21,7 +22,6 @@ from .api import (
     Season,
     Series,
     UnreleasedVideo,
-    Video,
     VideoData,
 )
 from .language import _
@@ -42,7 +42,7 @@ class Folder:
     ) -> None:
         self.__handle = ctx.handle
         self.__total_items = total_items
-        xbmcplugin.setPluginCategory(self.__handle, _(name) if isinstance(name, int) else name)
+        xbmcplugin.setPluginCategory(self.__handle, _(name))
         xbmcplugin.setContent(self.__handle, content)
 
     @classmethod
@@ -61,9 +61,7 @@ class Folder:
         special_sort: str | None = None,
         contexts: list[tuple[str, str]] | None = None,
     ) -> None:
-        if isinstance(label, int):
-            label = _(label)
-        list_item = xbmcgui.ListItem(label=label, path=path)
+        list_item = xbmcgui.ListItem(label=_(label), path=path)
         list_item.setProperty("IsPlayable", "false")
         if special_sort is not None:
             list_item.setProperty("SpecialSort", special_sort)
@@ -190,7 +188,7 @@ class Folder:
                     )
                 )
 
-        typ = "video" if isinstance(video, Video) else "movie"
+        typ = "video" if isinstance(video, VIDEO_TYPES) else "movie"
         if video.is_in_list:
             contextmenu.insert(
                 0,
@@ -535,7 +533,7 @@ def render_page(  # noqa: PLR0913
             special_sort="top",
         )
     for medium in page.items:
-        if isinstance(medium, (Video, Movie)):
+        if isinstance(medium, (*VIDEO_TYPES, Movie)):
             folder.add_video(router=router, video=medium)
         elif isinstance(medium, Collection):
             folder.add_collection(router=router, collection=medium)
