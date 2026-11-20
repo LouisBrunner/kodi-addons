@@ -1,7 +1,11 @@
 # FIXME: we are tied to the targeted Kodi version
-GHSA-6q48-6c7w-9gw2
-CVE-2026-85999
-CVE-2026-86000
-CVE-2026-97687
-CVE-2026-97688
-CVE-2026-97689
+GHSA-6q48-6c7w-9gw2  # certifi: transitive via requests, emSign root CAs
+CVE-2026-85999  # soupsieve: transitive via beautifulsoup4, whitespace ReDoS
+CVE-2026-86000  # soupsieve: transitive via beautifulsoup4, selector ReDoS
+CVE-2026-97687  # urllib3: transitive via requests, HTTPS proxy TLS config ignored
+CVE-2026-97688  # urllib3: transitive via requests, chunked deflate infinite loop
+CVE-2026-97689  # urllib3: transitive via requests, unbounded chunk-size line
+CVE-2026-126190  # soupsieve: transitive via beautifulsoup4, descendant combinator DoS
+CVE-2026-126191  # soupsieve: transitive via beautifulsoup4, selector compile ReDoS
+CVE-2026-126192  # soupsieve: transitive via beautifulsoup4, :has() quadratic time
+CVE-2026-126193  # soupsieve: transitive via beautifulsoup4, CSS parser recursion

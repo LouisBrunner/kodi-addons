@@ -25,6 +25,8 @@ class Kodi:
         self.addon = self.addonm.sub_double(xbmcaddon.Addon)
         self.settings = self.addonm.sub_double(xbmcaddon.Settings)
         self.ListItem = self.gui.sub_pod(xbmcgui.ListItem)
+        self.InfoTagVideo = self.xbmc.sub_pod(xbmc.InfoTagVideo)
+        self.ListItem.getVideoInfoTag = lambda item: item._data.setdefault("videoInfoTag", self.InfoTagVideo())  # noqa: SLF001
 
     def is_playing(self, *, answer: bool) -> None:
         self.player.expect(self.player._.isPlaying).returns(answer)

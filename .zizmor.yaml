@@ -1,5 +1,0 @@
-rules:
-  self-repository:
-    disable: true
-  unpinned-uses:
-    disable: true

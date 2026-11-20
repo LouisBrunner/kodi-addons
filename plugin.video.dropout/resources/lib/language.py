@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, Union
 
 import xbmc
 
@@ -44,7 +44,10 @@ class Language:
     ENTER_PIN = 32137
 
     @classmethod
-    def __call__(cls, uid: int) -> str:
+    def __call__(cls, uid: Union[int, str]) -> str:
+        if isinstance(uid, str):
+            return uid
+
         text = Addon.XBMC.getLocalizedString(uid) if uid >= _ADDON_STRINGS_START else xbmc.getLocalizedString(uid)
         if text == "":
             log_message(f"missing string {uid}", level=LOGWARNING)
